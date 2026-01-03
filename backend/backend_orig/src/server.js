@@ -1,0 +1,14 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import dotenv from 'dotenv';
+import { initFirebase } from './utils/firebase.js';
+import authRoutes from './routes/auth.routes.js';
+dotenv.config();
+await initFirebase(process.env.SERVICE_ACCOUNT_PATH);
+const app = express();
+app.use(helmet(), express.json(), express.urlencoded({extended:true}), cors({origin:process.env.CORS_ORIGIN||'*'}), morgan('dev'));
+app.get('/api/v1/health', (_req,res)=>res.json({ok:true}));
+app.use('/api/v1/auth', authRoutes);
+app.listen(process.env.PORT||5000, ()=> console.log('API running'));
