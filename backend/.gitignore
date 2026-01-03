@@ -1,0 +1,13 @@
+# Node
+node_modules/
+
+# Environment variables
+.env
+
+# Firebase / Google credentials
+firebase-service-account.json
+*.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
