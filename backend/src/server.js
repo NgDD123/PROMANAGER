@@ -17,7 +17,7 @@ const cleanEnvVar = (value) => {
 // Environment configuration - NOW read from loaded .env file
 const NODE_ENV = cleanEnvVar(process.env.NODE_ENV) || 'development';
 const PORT = parseInt(cleanEnvVar(process.env.PORT)) || 3001; // Default to 3001
-const CORS_ORIGIN = cleanEnvVar(process.env.CORS_ORIGIN) || 'http://localhost:5173';
+const CORS_ORIGIN = cleanEnvVar(process.env.CORS_ORIGIN) || 'https://app.gbma.tech';
 const allowed = CORS_ORIGIN ? CORS_ORIGIN.split(',') : false;
 
 console.log(`🚀 Starting server in ${NODE_ENV} mode`);
