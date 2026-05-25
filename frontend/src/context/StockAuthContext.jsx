@@ -135,8 +135,13 @@ export function StockAuthProvider({ children }) {
     if (!user) return false;
     const userRole = (user.role || "").toUpperCase();
     
-    // ADMIN, SUPER_ADMIN, and DIRECTOR_MANAGER have access to everything
-    if (userRole === "ADMIN" || userRole === "SUPER_ADMIN" || userRole === "DIRECTOR_MANAGER") {
+    // Service / org admins and directors have full stock access
+    if (
+      userRole === "ADMIN" ||
+      userRole === "SUPER_ADMIN" ||
+      userRole === "STOCK_ADMIN" ||
+      userRole === "DIRECTOR_MANAGER"
+    ) {
       return true;
     }
     
@@ -151,8 +156,12 @@ export function StockAuthProvider({ children }) {
     if (!user) return false;
     const userRole = (user.role || "").toUpperCase();
     
-    // ADMIN, SUPER_ADMIN, and DIRECTOR_MANAGER have access to all departments
-    if (userRole === "ADMIN" || userRole === "SUPER_ADMIN" || userRole === "DIRECTOR_MANAGER") {
+    if (
+      userRole === "ADMIN" ||
+      userRole === "SUPER_ADMIN" ||
+      userRole === "STOCK_ADMIN" ||
+      userRole === "DIRECTOR_MANAGER"
+    ) {
       return true;
     }
     

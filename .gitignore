@@ -12,3 +12,7 @@ node_modules/
 **/.env.production
 
 backend/firebase-service-account.json
+
+# GBMA demo seeds (local only — do not commit)
+backend/scripts/seedGbmaPlatformUsers.js
+backend/src/services/gbmaServiceSeed.service.js

@@ -87,8 +87,9 @@ async function tryPlatformUser(email, password) {
   const roleName = user.role?.role_name || '';
   const isSuperAdmin = normalizeRoleName(roleName) === 'SUPER_ADMIN';
 
+  // Let service-specific providers handle non–super-admin accounts (same email may exist in hospitalAdmins, etc.)
   if (!isSuperAdmin) {
-    throw authError('Use your service credentials to sign in.', 403);
+    return null;
   }
 
   const token = signToken(
