@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { initFirebase } from '../utils/firebase.js';
 import { getMailConfigStatus, isMailConfigured } from './utils/mailer.js';
+import { buildCorsOptions } from './config/cors.config.js';
 
 const NODE_ENV_RAW = process.env.NODE_ENV || 'development';
 
@@ -17,11 +18,10 @@ const cleanEnvVar = (value) => {
 // Environment configuration - NOW read from loaded .env file
 const NODE_ENV = cleanEnvVar(process.env.NODE_ENV) || 'development';
 const PORT = parseInt(cleanEnvVar(process.env.PORT)) || 3001; // Default to 3001
-const CORS_ORIGIN = cleanEnvVar(process.env.CORS_ORIGIN) || 'https://app.gbma.tech';
-const allowed = CORS_ORIGIN ? CORS_ORIGIN.split(',') : false;
+const { allowedOrigins, options: corsOptions } = buildCorsOptions(process.env.CORS_ORIGIN);
 
 console.log(`🚀 Starting server in ${NODE_ENV} mode`);
-console.log(`📡 CORS Origin: ${CORS_ORIGIN}`);
+console.log(`📡 CORS allowed origins: ${allowedOrigins.join(', ')}`);
 console.log(`🔌 Port will be: ${PORT}`);
 console.log(`🔌 PORT from env: ${process.env.PORT}`);
 console.log(`🔌 NODE_ENV from env: ${process.env.NODE_ENV}`);
@@ -163,30 +163,17 @@ import propertyBillingRoutes from './routes/property/billing.routes.js';
 import maintenanceRoutes from './routes/property/maintenance.routes.js';
 import propertyStaffRoutes from './routes/property/staff.routes.js';
 
-// Middlewares
+// Middlewares — CORS before helmet so preflight responses include ACAO headers
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(
-  helmet(),
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
   express.json(),
   express.urlencoded({ extended: true }),
-  cors({ 
-    origin: allowed,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    preflightContinue: false,
-    optionsSuccessStatus: 200
-  }),
   morgan(NODE_ENV === 'production' ? 'combined' : 'dev')
 );
-
-// Additional CORS preflight handler
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin);
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
 
 // Firebase readiness middleware
 const requireFirebase = (req, res, next) => {
@@ -336,7 +323,7 @@ const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
 app.listen(PORT, HOST, () => {
   console.log(`\n🚀 Server running on ${HOST}:${PORT}`);
   console.log(`🌍 Environment: ${NODE_ENV}`);
-  console.log(`📡 CORS Origin: ${CORS_ORIGIN}`);
+  console.log(`📡 CORS allowed origins: ${allowedOrigins.join(', ')}`);
   console.log(`🔗 Health Check: http://${HOST}:${PORT}/api/v1/health`);
   console.log(`📚 API Base URL: http://${HOST}:${PORT}/api/v1`);
   console.log('\n✅ Server ready to accept connections\n');

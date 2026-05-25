@@ -6,9 +6,15 @@ import { fileURLToPath } from 'url';
 const backendRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const nodeEnv = (process.env.NODE_ENV || 'development').trim();
 
-const envPath = join(backendRoot, '.env');
-if (existsSync(envPath)) {
-  dotenv.config({ path: envPath });
+const envFiles = [
+  join(backendRoot, '.env'),
+  join(backendRoot, `.env.${nodeEnv}`),
+];
+
+for (const envPath of envFiles) {
+  if (existsSync(envPath)) {
+    dotenv.config({ path: envPath, override: false });
+  }
 }
 
 // Keep NODE_ENV from the shell/npm script when set (e.g. production deploys).
