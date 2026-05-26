@@ -171,6 +171,31 @@ const ngoApi = baseAPI.injectEndpoints({
       transformResponse: unwrapNgoData,
     }),
 
+    getNgoAccountProfile: builder.query({
+      query: () => ngoPath('account/me'),
+      providesTags: ['NgoAccount'],
+      transformResponse: unwrapNgoData,
+    }),
+
+    updateNgoAccountProfile: builder.mutation({
+      query: (body) => ({
+        url: ngoPath('account/me'),
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['NgoAccount'],
+      transformResponse: unwrapNgoData,
+    }),
+
+    changeNgoAccountPassword: builder.mutation({
+      query: (body) => ({
+        url: ngoPath('account/password'),
+        method: 'PATCH',
+        body,
+      }),
+      transformResponse: unwrapNgoData,
+    }),
+
     ...ngoCrud(builder, {
       plural: 'NgoFinances',
       singular: 'NgoFinance',
@@ -192,6 +217,15 @@ const ngoApi = baseAPI.injectEndpoints({
       path: '/ngo/contracts',
       tag: 'NgoContract',
     }),
+    patchNgoContract: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/ngo/contracts/${id}`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: (_r, _e, { id }) => ['NgoContract', { type: 'NgoContract', id }],
+      transformResponse: unwrapNgoData,
+    }),
 
     getNgoMonitoringSummary: builder.query({
       query: (params) =>
@@ -207,6 +241,40 @@ const ngoApi = baseAPI.injectEndpoints({
       singular: 'NgoTender',
       path: '/ngo/tenders',
       tag: 'NgoTender',
+    }),
+
+    ...ngoCrud(builder, {
+      plural: 'NgoStorages',
+      singular: 'NgoStorage',
+      path: '/ngo/storages',
+      tag: 'NgoStorage',
+    }),
+
+    ...ngoCrud(builder, {
+      plural: 'NgoFieldSites',
+      singular: 'NgoFieldSite',
+      path: '/ngo/field-sites',
+      tag: 'NgoFieldSite',
+    }),
+
+    ...ngoCrud(builder, {
+      plural: 'NgoFieldVisits',
+      singular: 'NgoFieldVisit',
+      path: '/ngo/field-visits',
+      tag: 'NgoFieldVisit',
+    }),
+
+    getNgoGpsLocations: builder.query({
+      query: () => '/ngo/gps-locations',
+      transformResponse: unwrapNgoData,
+      providesTags: ['NgoFieldSite'],
+    }),
+
+    ...ngoCrud(builder, {
+      plural: 'NgoServiceControls',
+      singular: 'NgoServiceControl',
+      path: '/ngo/service-control',
+      tag: 'NgoServiceControl',
     }),
 
     ...ngoCrud(builder, {
@@ -295,6 +363,85 @@ const ngoApi = baseAPI.injectEndpoints({
       }),
       invalidatesTags: ['NgoContract', 'NgoProject', 'NgoTender'],
     }),
+
+    ...ngoCrud(builder, {
+      plural: 'NgoChurchRecords',
+      singular: 'NgoChurchRecord',
+      path: '/ngo/church',
+      tag: 'NgoChurch',
+    }),
+
+    getNgoChurchSummary: builder.query({
+      query: () => '/ngo/church/summary',
+      transformResponse: unwrapNgoData,
+      providesTags: ['NgoChurch'],
+    }),
+
+    getNgoChurchWorkspace: builder.query({
+      query: () => '/ngo/church/workspace',
+      transformResponse: unwrapNgoData,
+      providesTags: ['NgoChurch'],
+    }),
+
+    generateNgoChurchMemberId: builder.query({
+      query: () => '/ngo/church/members/next-id',
+      transformResponse: unwrapNgoData,
+    }),
+
+    getNgoChurchUsers: builder.query({
+      query: () => '/ngo/church/users',
+      transformResponse: unwrapNgoData,
+      providesTags: ['NgoChurchUser'],
+    }),
+
+    getNgoChurchUserById: builder.query({
+      query: (id) => `/ngo/church/users/${id}`,
+      transformResponse: unwrapNgoData,
+      providesTags: (_r, _e, id) => [{ type: 'NgoChurchUser', id }],
+    }),
+
+    createNgoChurchUser: builder.mutation({
+      query: (body) => ({ url: '/ngo/church/users', method: 'POST', body }),
+      invalidatesTags: ['NgoChurchUser'],
+      transformResponse: unwrapNgoMutation,
+    }),
+
+    updateNgoChurchUser: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/ngo/church/users/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['NgoChurchUser'],
+      transformResponse: unwrapNgoData,
+    }),
+
+    deleteNgoChurchUser: builder.mutation({
+      query: (id) => ({ url: `/ngo/church/users/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['NgoChurchUser'],
+      transformResponse: unwrapNgoData,
+    }),
+
+    resendNgoChurchUserCredentials: builder.mutation({
+      query: (id) => ({
+        url: `/ngo/church/users/${id}/resend-credentials`,
+        method: 'POST',
+      }),
+      transformResponse: unwrapNgoMutation,
+    }),
+
+    uploadNgoChurchMemberPhoto: builder.mutation({
+      query: (file) => {
+        const formData = new FormData();
+        formData.append('photo', file);
+        return {
+          url: '/ngo/church/upload-photo',
+          method: 'POST',
+          body: formData,
+        };
+      },
+      transformResponse: unwrapNgoData,
+    }),
   }),
 });
 
@@ -339,6 +486,9 @@ export const {
   useDeleteNgoUserMutation,
   useActivateNgoUserMutation,
   useSuspendNgoUserMutation,
+  useGetNgoAccountProfileQuery,
+  useUpdateNgoAccountProfileMutation,
+  useChangeNgoAccountPasswordMutation,
   useGetNgoFinancesQuery,
   useGetNgoFinanceByIdQuery,
   useCreateNgoFinanceMutation,
@@ -349,6 +499,7 @@ export const {
   useGetNgoContractsQuery,
   useGetNgoContractByIdQuery,
   useCreateNgoContractMutation,
+  usePatchNgoContractMutation,
   useUpdateNgoContractMutation,
   useDeleteNgoContractMutation,
   useGetNgoMonitoringSummaryQuery,
@@ -357,6 +508,27 @@ export const {
   useCreateNgoTenderMutation,
   useUpdateNgoTenderMutation,
   useDeleteNgoTenderMutation,
+  useGetNgoStoragesQuery,
+  useGetNgoStorageByIdQuery,
+  useCreateNgoStorageMutation,
+  useUpdateNgoStorageMutation,
+  useDeleteNgoStorageMutation,
+  useGetNgoFieldSitesQuery,
+  useGetNgoFieldSiteByIdQuery,
+  useCreateNgoFieldSiteMutation,
+  useUpdateNgoFieldSiteMutation,
+  useDeleteNgoFieldSiteMutation,
+  useGetNgoFieldVisitsQuery,
+  useGetNgoFieldVisitByIdQuery,
+  useCreateNgoFieldVisitMutation,
+  useUpdateNgoFieldVisitMutation,
+  useDeleteNgoFieldVisitMutation,
+  useGetNgoGpsLocationsQuery,
+  useGetNgoServiceControlsQuery,
+  useGetNgoServiceControlByIdQuery,
+  useCreateNgoServiceControlMutation,
+  useUpdateNgoServiceControlMutation,
+  useDeleteNgoServiceControlMutation,
   useGetNgoImpactsQuery,
   useGetNgoImpactByIdQuery,
   useCreateNgoImpactMutation,
@@ -391,6 +563,21 @@ export const {
   useGetNgoProjectDetailsQuery,
   useLinkNgoTenderToProjectMutation,
   useLinkNgoContractToTenderProjectMutation,
+  useGetNgoChurchRecordsQuery,
+  useGetNgoChurchRecordByIdQuery,
+  useCreateNgoChurchRecordMutation,
+  useUpdateNgoChurchRecordMutation,
+  useDeleteNgoChurchRecordMutation,
+  useGetNgoChurchSummaryQuery,
+  useGetNgoChurchWorkspaceQuery,
+  useLazyGenerateNgoChurchMemberIdQuery,
+  useGetNgoChurchUsersQuery,
+  useGetNgoChurchUserByIdQuery,
+  useCreateNgoChurchUserMutation,
+  useUpdateNgoChurchUserMutation,
+  useDeleteNgoChurchUserMutation,
+  useResendNgoChurchUserCredentialsMutation,
+  useUploadNgoChurchMemberPhotoMutation,
 } = ngoApi;
 
 export default ngoApi;

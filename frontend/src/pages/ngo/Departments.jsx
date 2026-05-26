@@ -224,7 +224,7 @@ export default function Departments() {
       ...formData,
       organizationId,
       branchId: '',
-      parentDepartmentId: ''
+      ...(modalMode !== 'add' ? { parentDepartmentId: '' } : {}),
     });
   };
 
@@ -233,17 +233,17 @@ export default function Departments() {
   const filteredDepartments = departments.filter((dept) => {
     const term = searchTerm.toLowerCase();
     return (
-      dept.name?.toLowerCase().includes(term) ||
-      dept.code?.toLowerCase().includes(term) ||
-      dept.description?.toLowerCase().includes(term)
+      (dept.name || '').toLowerCase().includes(term) ||
+      (dept.code || '').toLowerCase().includes(term) ||
+      (dept.description || '').toLowerCase().includes(term)
     );
   });
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Departments</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Departments</h1>
           <p className="text-gray-600 mt-1">
             Manage departments by organization and branch
           </p>
@@ -251,7 +251,7 @@ export default function Departments() {
         <button
           type="button"
           onClick={handleAdd}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
         >
           <Plus size={20} />
           <span>Add Department</span>
@@ -437,167 +437,209 @@ export default function Departments() {
         saveLabel="Save Department"
         maxWidth="4xl"
       >
-        <NGOFormGrid>
-          <NGOFormField label="Organization" required colSpan={2}>
-            <select
-              value={formData.organizationId}
-              onChange={(e) => handleOrgChange(e.target.value)}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            >
-              <option value="">Select organization</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
-            </select>
-          </NGOFormField>
+        <div className="space-y-8">
+          <section>
+            <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+              Assignment
+            </h3>
+            <NGOFormGrid>
+              <NGOFormField label="Organization" required>
+                <select
+                  value={formData.organizationId}
+                  onChange={(e) => handleOrgChange(e.target.value)}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                >
+                  <option value="">Select organization</option>
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                    </option>
+                  ))}
+                </select>
+              </NGOFormField>
 
-          <NGOFormField label="Branch" required colSpan={2}>
-            <select
-              value={formData.branchId}
-              onChange={(e) =>
-                setFormData({ ...formData, branchId: e.target.value, parentDepartmentId: '' })
-              }
-              disabled={modalMode === 'view' || !formData.organizationId}
-              className={NGO_INPUT_CLASS}
-            >
-              <option value="">Select branch</option>
-              {formBranches.map((branch) => (
-                <option key={branch.id} value={branch.id}>{branch.name}</option>
-              ))}
-            </select>
-          </NGOFormField>
+              <NGOFormField label="Branch" required>
+                <select
+                  value={formData.branchId}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      branchId: e.target.value,
+                      ...(modalMode !== 'add' ? { parentDepartmentId: '' } : {}),
+                    })
+                  }
+                  disabled={modalMode === 'view' || !formData.organizationId}
+                  className={NGO_INPUT_CLASS}
+                >
+                  <option value="">Select branch</option>
+                  {formBranches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </NGOFormField>
+            </NGOFormGrid>
+          </section>
 
-          <NGOFormField label="Department Name" required>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="e.g. Programs, Finance, HR"
-            />
-          </NGOFormField>
+          <section>
+            <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+              Department details
+            </h3>
+            <NGOFormGrid>
+              <NGOFormField label="Department Name" required>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                  placeholder="e.g. Programs, Finance, HR"
+                />
+              </NGOFormField>
 
-          <NGOFormField label="Department Code">
-            <input
-              type="text"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="e.g. DEPT-001"
-            />
-          </NGOFormField>
+              <NGOFormField label="Status" required>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </NGOFormField>
 
-          <NGOFormField label="Parent Department" colSpan={2}>
-            <select
-              value={formData.parentDepartmentId}
-              onChange={(e) => setFormData({ ...formData, parentDepartmentId: e.target.value })}
-              disabled={modalMode === 'view' || !formData.branchId}
-              className={NGO_INPUT_CLASS}
-            >
-              <option value="">None (top-level department)</option>
-              {parentOptions.map((dept) => (
-                <option key={dept.id} value={dept.id}>{dept.name}</option>
-              ))}
-            </select>
-          </NGOFormField>
+              <NGOFormField label="Description" colSpan={2}>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  rows={3}
+                  className={NGO_INPUT_CLASS}
+                  placeholder="Department role and responsibilities"
+                />
+              </NGOFormField>
 
-          <NGOFormField label="Description" colSpan={2}>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              disabled={modalMode === 'view'}
-              rows={3}
-              className={NGO_INPUT_CLASS}
-              placeholder="Department role and responsibilities"
-            />
-          </NGOFormField>
+              <NGOFormField
+                label="Department Head"
+                colSpan={2}
+                hint="Optional — assign a staff member from your organization"
+              >
+                <select
+                  value={formData.headId}
+                  onChange={(e) => setFormData({ ...formData, headId: e.target.value })}
+                  disabled={modalMode === 'view' || !formData.organizationId}
+                  className={NGO_INPUT_CLASS}
+                >
+                  <option value="">Not assigned</option>
+                  {staff.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.fullName || member.name || member.email || member.id}
+                    </option>
+                  ))}
+                </select>
+              </NGOFormField>
+            </NGOFormGrid>
+          </section>
 
-          <NGOFormField
-            label="Department Head"
-            hint="Assign a staff member (user ID from Staff module)"
-          >
-            <select
-              value={formData.headId}
-              onChange={(e) => setFormData({ ...formData, headId: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            >
-              <option value="">Not assigned</option>
-              {staff.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.fullName || member.name || member.email || member.id}
-                </option>
-              ))}
-            </select>
-          </NGOFormField>
+          {modalMode !== 'add' ? (
+            <section>
+              <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+                Additional details (optional)
+              </h3>
+              <NGOFormGrid>
+                <NGOFormField label="Department Code">
+                  <input
+                    type="text"
+                    value={formData.code}
+                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    disabled={modalMode === 'view'}
+                    className={NGO_INPUT_CLASS}
+                    placeholder="e.g. DEPT-001"
+                  />
+                </NGOFormField>
 
-          <NGOFormField label="Status" required>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="archived">Archived</option>
-            </select>
-          </NGOFormField>
+                <NGOFormField label="Parent Department">
+                  <select
+                    value={formData.parentDepartmentId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, parentDepartmentId: e.target.value })
+                    }
+                    disabled={modalMode === 'view' || !formData.branchId}
+                    className={NGO_INPUT_CLASS}
+                  >
+                    <option value="">None (top-level department)</option>
+                    {parentOptions.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </NGOFormField>
 
-          <NGOFormField label="Annual Budget (USD)">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={formData.budget}
-              onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="0"
-            />
-          </NGOFormField>
+                <NGOFormField label="Annual Budget (USD)">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={formData.budget}
+                    onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                    disabled={modalMode === 'view'}
+                    className={NGO_INPUT_CLASS}
+                    placeholder="0"
+                  />
+                </NGOFormField>
 
-          <NGOFormField label="Employee Count">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={formData.employeeCount}
-              onChange={(e) => setFormData({ ...formData, employeeCount: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="0"
-            />
-          </NGOFormField>
+                <NGOFormField label="Employee Count">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={formData.employeeCount}
+                    onChange={(e) =>
+                      setFormData({ ...formData, employeeCount: e.target.value })
+                    }
+                    disabled={modalMode === 'view'}
+                    className={NGO_INPUT_CLASS}
+                    placeholder="0"
+                  />
+                </NGOFormField>
 
-          <NGOFormField
-            label="Functions"
-            colSpan={2}
-            hint="Comma-separated list, e.g. Fundraising, Reporting, Compliance"
-          >
-            <input
-              type="text"
-              value={formData.functionsText}
-              onChange={(e) => setFormData({ ...formData, functionsText: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Function 1, Function 2"
-            />
-          </NGOFormField>
+                <NGOFormField
+                  label="Functions"
+                  colSpan={2}
+                  hint="Comma-separated list, e.g. Fundraising, Reporting, Compliance"
+                >
+                  <input
+                    type="text"
+                    value={formData.functionsText}
+                    onChange={(e) =>
+                      setFormData({ ...formData, functionsText: e.target.value })
+                    }
+                    disabled={modalMode === 'view'}
+                    className={NGO_INPUT_CLASS}
+                    placeholder="Function 1, Function 2"
+                  />
+                </NGOFormField>
 
-          {modalMode === 'view' && Array.isArray(selectedDept?.functions) && selectedDept.functions.length > 0 && (
-            <NGOFormField label="Functions list" colSpan={2}>
-              <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
-                {selectedDept.functions.map((fn, i) => (
-                  <li key={i}>{fn}</li>
-                ))}
-              </ul>
-            </NGOFormField>
-          )}
-        </NGOFormGrid>
+                {modalMode === 'view' &&
+                Array.isArray(selectedDept?.functions) &&
+                selectedDept.functions.length > 0 ? (
+                  <NGOFormField label="Functions list" colSpan={2}>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                      {selectedDept.functions.map((fn, i) => (
+                        <li key={i}>{fn}</li>
+                      ))}
+                    </ul>
+                  </NGOFormField>
+                ) : null}
+              </NGOFormGrid>
+            </section>
+          ) : null}
+        </div>
       </NGOModal>
     </div>
   );

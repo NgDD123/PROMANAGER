@@ -262,7 +262,7 @@ export default function ServiceControlCenter({
               <PackageCheck className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h4 className="text-xl font-bold text-gray-900">Service Registry</h4>
+              <h4 className="text-base sm:text-xl font-bold text-gray-900">Service Registry</h4>
               <p className="text-sm text-gray-600">All connected services and their operational status</p>
             </div>
           </div>
@@ -597,7 +597,7 @@ function MetricCard({ icon: Icon, label, value, color }) {
       <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${colors[color]} flex items-center justify-center mb-4`}>
         <Icon className="w-6 h-6 text-white" />
       </div>
-      <p className="text-3xl font-bold text-gray-900">{value}</p>
+      <p className="text-xl sm:text-3xl font-bold text-gray-900">{value}</p>
       <p className="text-xs text-gray-600 mt-2 font-semibold uppercase tracking-wide">{label}</p>
     </div>
   );

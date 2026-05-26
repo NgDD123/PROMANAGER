@@ -101,7 +101,7 @@ function Stat({ icon: Icon, label, value, detail }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase font-semibold text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+          <p className="mt-2 text-xl sm:text-2xl font-bold text-slate-950">{value}</p>
           <p className="mt-1 text-xs text-slate-500">{detail}</p>
         </div>
         <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -306,9 +306,9 @@ export default function Impact() {
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
             <Target size={18} />
-            <span>NGO Impact Report</span>
+            <span>Organization Report</span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-950">Full NGO & Projects Performance Report</h1>
+          <h1 className="mt-1 text-xl sm:text-2xl font-bold text-slate-950">Organization Report</h1>
           <p className="mt-1 text-slate-600">
             Consolidated professional report from NGO organizations, branches, departments, staff, projects, M&E, finance, audits, governance, and impact records.
           </p>
@@ -376,19 +376,19 @@ export default function Impact() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="text-xs text-slate-500">Staff accounts</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{staff.length}</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">{staff.length}</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="text-xs text-slate-500">M&E records</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{contracts.length}</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">{contracts.length}</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="text-xs text-slate-500">Impact records</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{impacts.length}</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">{impacts.length}</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="text-xs text-slate-500">High risks</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{report.highRisks}</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">{report.highRisks}</p>
             </div>
           </div>
         </div>
@@ -491,19 +491,19 @@ export default function Impact() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="text-sm text-slate-500">Total Budget</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{currency(report.totalBudget)}</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">{currency(report.totalBudget)}</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="text-sm text-slate-500">Total Expense</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{currency(report.totalExpense)}</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">{currency(report.totalExpense)}</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="text-sm text-slate-500">Finance Income Records</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{currency(report.financeIncome)}</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">{currency(report.financeIncome)}</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-4">
               <p className="text-sm text-slate-500">Finance Entries</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{finances.length}</p>
+              <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">{finances.length}</p>
             </div>
           </div>
         </Section>

@@ -134,15 +134,15 @@ export default function Organizations() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Organization</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Organization</h1>
           <p className="text-gray-600 mt-1">Manage your registered organization profile</p>
         </div>
         {organizations.length === 0 && (
         <button
           onClick={handleAdd}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
         >
           <Plus size={20} />
           <span>Add Organization</span>
@@ -152,21 +152,21 @@ export default function Organizations() {
 
       {/* Search and Filters */}
       <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <div className="flex items-center space-x-4">
-          <div className="flex-1 relative">
+        <div className="flex items-start space-x-4 md:flex-row flex-col gap-2">
+          <div className="flex-1 relative w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
             <input
               type="text"
               placeholder="Search organizations..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
             />
           </div>
           <select 
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
           >
             <option value="">All Types</option>
             <option value="NGO">NGO</option>
@@ -177,7 +177,7 @@ export default function Organizations() {
           <select 
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
           >
             <option value="">All Status</option>
             <option value="Active">Active</option>

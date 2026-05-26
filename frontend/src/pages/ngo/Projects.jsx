@@ -201,9 +201,9 @@ export default function Projects() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Projects & Tenders</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Projects & Tenders</h1>
           <p className="text-gray-600 mt-1">
             Create and manage NGO programs with budget, timeline, and beneficiary tracking
           </p>

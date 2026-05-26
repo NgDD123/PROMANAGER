@@ -2790,7 +2790,7 @@ export default function NGODashboard() {
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-emerald-700 mb-2">Professional NGO operations console</p>
-                <h2 className="text-3xl font-bold tracking-tight">{currentOrganization.name}</h2>
+                <h2 className="text-xl sm:text-3xl font-bold tracking-tight">{currentOrganization.name}</h2>
                 <p className="text-gray-600 mt-2">
                   {currentOrganization.type} â€¢ {currentOrganization.headquarters} â€¢ {currentOrganization.defaultLanguage} â€¢ {currentOrganization.defaultCurrency}
                 </p>
@@ -3100,7 +3100,7 @@ export default function NGODashboard() {
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Branches will be linked to</p>
-                      <h4 className="mt-1 text-xl font-bold text-emerald-950">{currentOrganization.name}</h4>
+                      <h4 className="mt-1 text-base sm:text-xl font-bold text-emerald-950">{currentOrganization.name}</h4>
                       <p className="mt-1 text-sm text-emerald-800">
                         {currentOrganization.type} â€¢ {currentOrganization.registrationNo || 'No registration'} â€¢ {currentOrganization.headquarters || 'No headquarters'}
                       </p>
@@ -3173,7 +3173,7 @@ export default function NGODashboard() {
                     <div className="rounded-lg border border-gray-200 p-4">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                         <div>
-                          <h4 className="text-xl font-bold">{selectedBranch.name}</h4>
+                          <h4 className="text-base sm:text-xl font-bold">{selectedBranch.name}</h4>
                           <p className="text-sm text-gray-600">{selectedBranch.type} â€¢ {getBranchAddress(selectedBranch)}</p>
                         </div>
                         <SelectInput label="Select Branch" value={selectedBranch.id} options={scopedBranches.map(branch => ({ label: branch.name, value: branch.id }))} onChange={setSelectedBranchId} />
@@ -3359,7 +3359,7 @@ export default function NGODashboard() {
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Departments will be created under</p>
-                      <h4 className="mt-1 text-xl font-bold text-emerald-950">{currentOrganization.name}</h4>
+                      <h4 className="mt-1 text-base sm:text-xl font-bold text-emerald-950">{currentOrganization.name}</h4>
                       <p className="mt-1 text-sm text-emerald-800">
                         {currentOrganization.type} â€¢ {currentOrganization.registrationNo || 'No registration'} â€¢ {scopedBranches.length} linked branch{scopedBranches.length === 1 ? '' : 'es'}
                       </p>
@@ -3445,7 +3445,7 @@ export default function NGODashboard() {
                     <div className="rounded-lg border border-gray-200 p-4">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                         <div>
-                          <h4 className="text-xl font-bold">{selectedDepartment.name}</h4>
+                          <h4 className="text-base sm:text-xl font-bold">{selectedDepartment.name}</h4>
                           <p className="text-sm text-gray-600">{branchById[selectedDepartment.branchId]?.name || 'Unassigned'} â€¢ {money(selectedDepartment.budget, currentOrganization.defaultCurrency)}</p>
                         </div>
                         <SelectInput label="Select Department" value={selectedDepartment.id} options={scopedDepartments.map(department => ({ label: department.name, value: department.id }))} onChange={setSelectedDepartmentId} />
@@ -3627,7 +3627,7 @@ export default function NGODashboard() {
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Staff will be assigned under</p>
-                      <h4 className="mt-1 text-xl font-bold text-emerald-950">{staffFormOrganization.name}</h4>
+                      <h4 className="mt-1 text-base sm:text-xl font-bold text-emerald-950">{staffFormOrganization.name}</h4>
                       <p className="mt-1 text-sm text-emerald-800">
                         {staffFormOrganization.type} â€¢ {staffFormOrganization.registrationNo || 'No registration'} â€¢ {staffFormBranches.length} branch{staffFormBranches.length === 1 ? '' : 'es'} available
                       </p>
@@ -3750,7 +3750,7 @@ export default function NGODashboard() {
                     <div className="rounded-lg border border-gray-200 p-4">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                         <div>
-                          <h4 className="text-xl font-bold">{selectedStaff.name}</h4>
+                          <h4 className="text-base sm:text-xl font-bold">{selectedStaff.name}</h4>
                           <p className="text-sm text-gray-600">{selectedStaff.role} â€¢ {branchById[selectedStaff.branchId]?.name || 'Unassigned'} â€¢ {departmentById[selectedStaff.departmentId]?.name || 'Unassigned'}</p>
                         </div>
                         <SelectInput label="Select Staff" value={selectedStaff.id} options={scopedStaff.map(member => ({ label: member.name, value: member.id }))} onChange={setSelectedStaffId} />
@@ -3948,7 +3948,7 @@ export default function NGODashboard() {
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Roles will be configured for</p>
-                      <h4 className="mt-1 text-xl font-bold text-emerald-950">{roleFormOrganization.name}</h4>
+                      <h4 className="mt-1 text-base sm:text-xl font-bold text-emerald-950">{roleFormOrganization.name}</h4>
                       <p className="mt-1 text-sm text-emerald-800">
                         {roleFormOrganization.type} â€¢ {roleFormOrganization.registrationNo || 'No registration'} â€¢ {scopedStaff.length} staff available
                       </p>
@@ -4054,7 +4054,7 @@ export default function NGODashboard() {
                     <div className="rounded-lg border border-gray-200 p-4">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                         <div>
-                          <h4 className="text-xl font-bold">{selectedRole.name}</h4>
+                          <h4 className="text-base sm:text-xl font-bold">{selectedRole.name}</h4>
                           <p className="text-sm text-gray-600">{selectedRole.scope || 'Organization'} scope â€¢ {(selectedRole.permissions || []).length} permissions</p>
                         </div>
                         <SelectInput label="Select Role" value={selectedRole.id} options={scopedRoles.map(role => ({ label: role.name, value: role.id }))} onChange={setSelectedRoleId} />
@@ -5413,7 +5413,7 @@ function Metric({ icon: Icon, label, value }) {
   return (
     <div className="border border-gray-200 rounded-lg p-4">
       <Icon className="w-5 h-5 text-emerald-700 mb-3" />
-      <p className="text-2xl font-bold">{value}</p>
+      <p className="text-xl sm:text-2xl font-bold">{value}</p>
       <p className="text-xs text-gray-500 mt-1">{label}</p>
     </div>
   );
@@ -5426,7 +5426,7 @@ function ReadinessCard({ icon: Icon, title, status, detail, onClick }) {
         <Icon className="w-4 h-4" />
         {title}
       </div>
-      <p className="text-2xl font-bold mt-2">{status}</p>
+      <p className="text-xl sm:text-2xl font-bold mt-2">{status}</p>
       <p className="text-sm text-gray-600 mt-2">{detail}</p>
     </button>
   );
@@ -5436,7 +5436,7 @@ function Panel({ title, subtitle, children }) {
   return (
     <section className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
       <div className="mb-6">
-        <h3 className="text-2xl font-bold">{title}</h3>
+        <h3 className="text-xl sm:text-2xl font-bold">{title}</h3>
         <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
       </div>
       {children}

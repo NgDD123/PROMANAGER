@@ -36,7 +36,7 @@ export default function FinancePage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">Finance Workspace</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Finance Workspace</h1>
           <p className="text-sm text-gray-600 mt-1">Manage budgets, grants, payroll approvals, and donor financial reports</p>
         </div>
       </header>
@@ -68,7 +68,7 @@ export default function FinancePage() {
         <section className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold">Grant Management</h2>
-            <button className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+            <button className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 whitespace-nowrap shrink-0">
               <Plus className="w-4 h-4" />
               Add Grant
             </button>
@@ -109,7 +109,7 @@ export default function FinancePage() {
         <section className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold">Payroll Approval</h2>
-            <button className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+            <button className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 whitespace-nowrap shrink-0">
               <Plus className="w-4 h-4" />
               Add Payroll
             </button>
@@ -144,7 +144,7 @@ export default function FinancePage() {
         <section className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold">Donor Reports</h2>
-            <button className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+            <button className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 whitespace-nowrap shrink-0">
               <Plus className="w-4 h-4" />
               Add Report
             </button>

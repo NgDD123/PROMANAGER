@@ -35,6 +35,7 @@ import UserSettingsPage from './pages/stock/UserSettingsPage.jsx';
 import StockSettingsPage from './pages/stock/StockSettingsPage.jsx';
 
 import { AuthProvider } from './context/AuthContext.jsx';
+import { PopupProvider } from './context/PopupContext.jsx';
 import { AppProvider } from './context/AppStateContext.jsx';
 import { StockProvider } from './context/stockContext.jsx';
 import { StockAuthProvider } from './context/StockAuthContext.jsx';
@@ -228,13 +229,10 @@ import NGODepartments from './pages/ngo/Departments.jsx';
 import NGORoles from './pages/ngo/Roles.jsx';
 import NGOStaff from './pages/ngo/Staff.jsx';
 import NGOProjects from './pages/ngo/Projects.jsx';
-import BeneficialOwners from './pages/ngo/BeneficialOwners.jsx';
 import NGOFinance from './pages/ngo/Finance.jsx';
 import NGOContracts from './pages/ngo/Contracts.jsx';
 import Impact from './pages/ngo/Impact.jsx';
-import FieldGIS from './pages/ngo/FieldGIS.jsx';
-import ServiceControl from './pages/ngo/ServiceControl.jsx';
-import Audit from './pages/ngo/Audit.jsx';
+import ChurchManagement from './pages/ngo/ChurchManagement.jsx';
 import NGOSettings from './pages/ngo/Settings.jsx';
 
 function AppContent() {
@@ -413,12 +411,13 @@ function AppContent() {
         <Route path='users' element={<Navigate to='staff' replace />} />
         <Route path='projects' element={<NGOProjects />} />
         <Route path='contracts' element={<NGOContracts />} />
-        <Route path='gis' element={<FieldGIS />} />
+        <Route path='gis' element={<Navigate to='/ngo/dashboard' replace />} />
         <Route path='finance' element={<NGOFinance />} />
         <Route path='impact' element={<Impact />} />
-        <Route path='audit' element={<Audit />} />
-        <Route path='beneficial-owners' element={<BeneficialOwners />} />
-        <Route path='service-control' element={<ServiceControl />} />
+        <Route path='church' element={<ChurchManagement />} />
+        <Route path='audit' element={<Navigate to='/ngo/dashboard' replace />} />
+        <Route path='beneficial-owners' element={<Navigate to='/ngo/dashboard' replace />} />
+        <Route path='service-control' element={<Navigate to='/ngo/dashboard' replace />} />
         <Route path='settings' element={<NGOSettings />} />
         <Route path='donors' element={<Navigate to='projects' replace />} />
         <Route path='reports' element={<Navigate to='impact' replace />} />
@@ -433,6 +432,7 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
+      <PopupProvider>
       <AppProvider>
         <CurrencyProvider>
           <HospitalAuthProvider>
@@ -458,6 +458,7 @@ export default function App() {
           </HospitalAuthProvider>
         </CurrencyProvider>
       </AppProvider>
+      </PopupProvider>
     </AuthProvider>
   );
 }

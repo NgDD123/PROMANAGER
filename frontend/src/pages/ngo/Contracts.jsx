@@ -4,15 +4,14 @@ import {
   BarChart3,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Download,
   Edit,
-  Eye,
   FileSpreadsheet,
-  FileText,
   Filter,
   Loader2,
-  MapPinned,
   Plus,
   Search,
   ShieldAlert,
@@ -29,45 +28,54 @@ import {
   useGetNgoContractsQuery,
   useGetNgoMonitoringSummaryQuery,
   useGetNgoOrganizationsQuery,
+  usePatchNgoContractMutation,
   useGetNgoProjectsQuery,
-  useUpdateNgoContractMutation,
+  useGetNgoUsersQuery,
   getNgoErrorMessage
 } from '../../store/actions/ngo.js';
 import { NGOFormField, NGOFormGrid, NGO_INPUT_CLASS } from '../../components/ngo/NGOModal.jsx';
+import {
+  aggregateMeMetrics,
+  deriveMeMetrics,
+  formatPercentDisplay,
+  formatUtilizationPercent
+} from '../../utils/meMetrics.js';
+import { usePopup } from '../../context/PopupContext.jsx';
 
 const STATUS_OPTIONS = ['Planning', 'Ongoing', 'Active', 'Completed', 'On Hold', 'Closed'];
 const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
 const INDICATOR_TYPES = ['Input', 'Output', 'Outcome', 'Impact'];
 const UNIT_OPTIONS = ['Number', 'Percentage', 'Currency', 'Quantity'];
+const ACTIVITY_STATUS_OPTIONS = ['Pending', 'Ongoing', 'Completed'];
+const GENDER_OPTIONS = ['Male', 'Female', 'Non-binary', 'Other', 'Prefer not to say'];
 const SEVERITY_OPTIONS = ['Low', 'Medium', 'High'];
 const REPORT_TYPES = ['Monthly report', 'Quarterly report', 'Annual report', 'Donor report', 'Impact report'];
 const EXPORT_TYPES = ['PDF', 'Excel', 'Word'];
 
-const MODULES = [
+const ME_RECORD_EXISTS_NOTICE =
+  'You have already added a Monitoring & Evaluation record for this project.';
+
+const FORM_STEPS = [
   { id: 'project', label: 'Project Information', icon: ClipboardList },
   { id: 'outcomes', label: 'Objectives & Outcomes', icon: Target },
-  { id: 'indicators', label: 'Indicators Management', icon: BarChart3 },
-  { id: 'activities', label: 'Activity Tracking', icon: Activity },
-  { id: 'beneficiaries', label: 'Beneficiary Tracking', icon: Users },
-  { id: 'data', label: 'Data Collection', icon: FileText },
+  { id: 'indicators', label: 'Indicators', icon: BarChart3 },
+  { id: 'activities', label: 'Activities', icon: Activity },
+  { id: 'beneficiaries', label: 'Beneficiaries', icon: Users },
   { id: 'visits', label: 'Field Visits', icon: CalendarDays },
-  { id: 'risks', label: 'Risk & Issue Tracking', icon: ShieldAlert },
-  { id: 'kpi', label: 'KPI Dashboard', icon: TrendingUp },
-  { id: 'reports', label: 'Reports', icon: FileSpreadsheet },
-  { id: 'gis', label: 'GIS / Map Tracking', icon: MapPinned },
-  { id: 'analytics', label: 'Analytics Dashboard', icon: BarChart3 }
+  { id: 'risks', label: 'Risks & Notes', icon: ShieldAlert }
 ];
 
+const WORKSPACE_MODULES = FORM_STEPS.filter((step) => step.id !== 'project');
+
 const blankIndicator = {
-  indicatorId: 'IND-001',
   name: '',
-  type: 'Outcome',
+  type: '',
   description: '',
-  unit: 'Number',
-  baseline: 0,
-  target: 0,
-  current: 0,
-  frequency: 'Monthly'
+  unit: '',
+  baseline: '',
+  target: '',
+  current: '',
+  frequency: ''
 };
 
 const blankActivity = {
@@ -76,18 +84,27 @@ const blankActivity = {
   assignedStaff: '',
   startDate: '',
   endDate: '',
-  status: 'Pending',
-  budgetUsed: 0,
-  progress: 0
+  status: '',
+  budgetUsed: '',
+  progress: ''
 };
 
+function staffDisplayName(member) {
+  return member?.fullName || member?.name || '';
+}
+
+function staffOptionLabel(member) {
+  const name = staffDisplayName(member);
+  const detail = member?.jobTitle || member?.roleName || '';
+  return detail ? `${name} — ${detail}` : name;
+}
+
 const blankBeneficiary = {
-  beneficiaryId: 'BEN-001',
   name: '',
   category: '',
   location: '',
   servicesReceived: '',
-  numberReached: 0,
+  numberReached: '',
   gender: '',
   ageGroup: ''
 };
@@ -162,47 +179,6 @@ const EMPTY_FORM = {
   notes: ''
 };
 
-const EMPTY_MODULE_FORMS = {
-  outcomes: {
-    goal: '',
-    objectives: '',
-    expectedOutcomes: '',
-    expectedOutputs: '',
-    successCriteria: '',
-    assumptions: '',
-    risks: ''
-  },
-  indicators: { ...blankIndicator },
-  activities: { ...blankActivity },
-  beneficiaries: { ...blankBeneficiary },
-  data: {
-    dataCollection: ['Survey Forms'],
-    notes: ''
-  },
-  visits: { ...blankFieldVisit },
-  risks: { ...blankRisk },
-  kpi: {
-    expense: 0,
-    performance: 0,
-    completion: 0
-  },
-  reports: {
-    type: 'Monthly report',
-    status: 'Draft',
-    period: '',
-    preparedBy: '',
-    exportFormats: ['PDF']
-  },
-  gis: {
-    region: '',
-    district: '',
-    sector: '',
-    village: '',
-    coordinates: '',
-    activityMap: ''
-  }
-};
-
 function splitLines(value) {
   if (Array.isArray(value)) return value;
   return String(value || '')
@@ -213,6 +189,31 @@ function splitLines(value) {
 
 function lines(value) {
   return Array.isArray(value) ? value.join('\n') : value || '';
+}
+
+function toDateInputValue(value) {
+  if (!value) return '';
+  const str = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+}
+
+function projectToFormFields(project) {
+  if (!project) return {};
+  return {
+    projectId: project.id || '',
+    organizationId: project.organizationId || '',
+    projectCode: project.code || '',
+    projectName: project.name || '',
+    program: project.programArea || '',
+    donor: project.donor || '',
+    projectManager: project.manager || '',
+    startDate: toDateInputValue(project.startDate),
+    endDate: toDateInputValue(project.endDate),
+    budget: project.budget ?? 0
+  };
 }
 
 function currency(value) {
@@ -246,20 +247,44 @@ function normalizeRecord(record) {
   };
 }
 
+const STEP_PAYLOAD_FIELDS = {
+  project: [
+    'organizationId',
+    'projectId',
+    'projectCode',
+    'projectName',
+    'program',
+    'projectManager',
+    'donor',
+    'startDate',
+    'endDate',
+    'status',
+    'budget'
+  ],
+  outcomes: ['goal', 'objectives', 'expectedOutcomes', 'expectedOutputs', 'successCriteria', 'assumptions', 'risks'],
+  indicators: ['indicators'],
+  activities: ['activities'],
+  beneficiaries: ['beneficiaries'],
+  visits: ['fieldVisits'],
+  risks: ['riskIssues', 'notes']
+};
+
 function buildPayload(form) {
+  const metrics = deriveMeMetrics(form);
   return {
     ...form,
     budget: Number(form.budget) || 0,
-    expense: Number(form.expense) || 0,
-    performance: Number(form.performance) || 0,
-    completion: Number(form.completion) || 0,
+    expense: metrics.expense,
+    performance: metrics.performance,
+    completion: metrics.completion,
+    beneficiaryTotal: metrics.beneficiariesReached,
     objectives: splitLines(form.objectives),
     expectedOutcomes: splitLines(form.expectedOutcomes),
     expectedOutputs: splitLines(form.expectedOutputs),
     successCriteria: splitLines(form.successCriteria),
     assumptions: splitLines(form.assumptions),
     risks: splitLines(form.risks),
-    indicators: form.indicators.map((item) => ({
+    indicators: form.indicators.map(({ indicatorId: _indicatorId, ...item }) => ({
       ...item,
       baseline: Number(item.baseline) || 0,
       target: Number(item.target) || 0,
@@ -268,13 +293,22 @@ function buildPayload(form) {
     activities: form.activities.map((item) => ({
       ...item,
       budgetUsed: Number(item.budgetUsed) || 0,
-      progress: Number(item.progress) || 0
+      progress:
+        item.progress === '' || item.progress == null || item.progress === undefined
+          ? ''
+          : Number(item.progress)
     })),
-    beneficiaries: form.beneficiaries.map((item) => ({
+    beneficiaries: form.beneficiaries.map(({ beneficiaryId: _beneficiaryId, ...item }) => ({
       ...item,
       numberReached: Number(item.numberReached) || 0
     }))
   };
+}
+
+function buildStepPayload(form, stepId) {
+  const full = buildPayload(form);
+  const keys = STEP_PAYLOAD_FIELDS[stepId] || [];
+  return Object.fromEntries(keys.map((key) => [key, full[key]]));
 }
 
 function statusClass(status) {
@@ -285,60 +319,14 @@ function statusClass(status) {
   return 'bg-slate-100 text-slate-700';
 }
 
-function sumBeneficiaries(record) {
-  const beneficiaryRows = Array.isArray(record.beneficiaries) ? record.beneficiaries : [];
-  const reached = beneficiaryRows.reduce((sum, item) => sum + (Number(item.numberReached) || 0), 0);
-  return reached || Number(record.beneficiaryTotal) || 0;
-}
-
-function recordExpense(record) {
-  const activityRows = Array.isArray(record.activities) ? record.activities : [];
-  const activitySpend = activityRows.reduce((sum, item) => sum + (Number(item.budgetUsed) || 0), 0);
-  return Number(record.expense) || activitySpend || 0;
-}
-
-function calculateTotals(records) {
-  const totals = records.reduce((acc, record) => {
-    const activities = Array.isArray(record.activities) ? record.activities : [];
-    const indicators = Array.isArray(record.indicators) ? record.indicators : [];
-    const completedActivities = activities.filter((activity) =>
-      String(activity.status || '').toLowerCase() === 'completed'
-    ).length;
-    const target = indicators.reduce((sum, item) => sum + (Number(item.target) || 0), 0);
-    const current = indicators.reduce((sum, item) => sum + (Number(item.current) || 0), 0);
-
-    acc.projects += 1;
-    acc.budget += Number(record.budget) || 0;
-    acc.expense += recordExpense(record);
-    acc.activities += activities.length;
-    acc.activitiesCompleted += completedActivities;
-    acc.beneficiariesReached += sumBeneficiaries(record);
-    acc.performance += Number(record.performance) || 0;
-    acc.completion += Number(record.completion) || 0;
-    acc.target += target;
-    acc.actual += current;
-    return acc;
-  }, {
-    projects: 0,
-    budget: 0,
-    expense: 0,
-    activities: 0,
-    activitiesCompleted: 0,
-    beneficiariesReached: 0,
-    performance: 0,
-    completion: 0,
-    target: 0,
-    actual: 0
-  });
-
-  const averageDenominator = totals.projects || 1;
+function formatDashboardTotals(records) {
+  const aggregated = aggregateMeMetrics(records);
   return {
-    ...totals,
-    budgetUtilization: totals.budget ? Math.round((totals.expense / totals.budget) * 100) : 0,
-    activityCompletion: totals.activities ? Math.round((totals.activitiesCompleted / totals.activities) * 100) : 0,
-    performance: totals.performance ? Math.round(totals.performance / averageDenominator) : totals.target ? Math.round((totals.actual / totals.target) * 100) : 0,
-    projectCompletion: Math.round(totals.completion / averageDenominator),
-    targetVsActual: totals.target ? Math.round((totals.actual / totals.target) * 100) : 0
+    ...aggregated,
+    budgetUtilization: formatUtilizationPercent(aggregated.budgetUtilization),
+    activityCompletion: formatUtilizationPercent(aggregated.activityCompletion),
+    performance: formatUtilizationPercent(aggregated.performance),
+    projectCompletion: formatUtilizationPercent(aggregated.projectCompletion)
   };
 }
 
@@ -363,7 +351,7 @@ function StatCard({ icon: Icon, label, value, caption }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+          <p className="mt-2 text-xl sm:text-2xl font-bold text-slate-900">{value}</p>
           <p className="mt-1 text-xs text-slate-500">{caption}</p>
         </div>
         <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -372,6 +360,210 @@ function StatCard({ icon: Icon, label, value, caption }) {
       </div>
     </div>
   );
+}
+
+function formatListValue(value) {
+  if (Array.isArray(value)) return value.filter((item) => String(item || '').trim());
+  if (typeof value === 'string' && value.trim()) return value.split('\n').map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function isPopulatedRow(item, keys = ['name', 'description', 'indicatorId', 'beneficiaryId', 'riskId', 'fieldOfficer', 'location']) {
+  if (!item || typeof item !== 'object') return false;
+  return keys.some((key) => {
+    const value = item[key];
+    if (value === 0) return true;
+    return String(value || '').trim().length > 0;
+  });
+}
+
+function DetailField({ label, value }) {
+  const display = value === 0 || value === '0' ? '0' : (value || '—');
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="mt-1 text-sm text-slate-900 whitespace-pre-wrap">{display}</dd>
+    </div>
+  );
+}
+
+function DetailList({ label, items }) {
+  const rows = formatListValue(items);
+  if (!rows.length) return <DetailField label={label} value="—" />;
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="mt-1">
+        <ul className="list-disc list-inside space-y-1 text-sm text-slate-900">
+          {rows.map((item, index) => (
+            <li key={`${label}-${index}`}>{item}</li>
+          ))}
+        </ul>
+      </dd>
+    </div>
+  );
+}
+
+function DetailCard({ title, children }) {
+  return (
+    <div className="border border-slate-200 rounded-lg p-4 bg-white space-y-3">
+      {title ? <h4 className="text-sm font-bold text-slate-800">{title}</h4> : null}
+      {children}
+    </div>
+  );
+}
+
+function MeRecordModuleView({ record, moduleId, orgById }) {
+  if (!record) return null;
+
+  if (moduleId === 'project') {
+    return (
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <DetailField label="Organization" value={orgById[record.organizationId]?.name} />
+        <DetailField label="Project ID" value={record.projectCode} />
+        <DetailField label="Project Name" value={record.projectName} />
+        <DetailField label="Program Area" value={record.program} />
+        <DetailField label="Project Manager" value={record.projectManager} />
+        <DetailField label="Donor / Funder" value={record.donor} />
+        <DetailField label="Project Start Date" value={record.startDate} />
+        <DetailField label="Project End Date" value={record.endDate} />
+        <DetailField label="Status" value={record.status} />
+        <DetailField label="Budget" value={currency(record.budget)} />
+      </dl>
+    );
+  }
+
+  if (moduleId === 'outcomes') {
+    return (
+      <dl className="space-y-4">
+        <DetailField label="Project Goal" value={record.goal} />
+        <DetailList label="Objectives" items={record.objectives} />
+        <DetailList label="Expected Outcomes" items={record.expectedOutcomes} />
+        <DetailList label="Expected Outputs" items={record.expectedOutputs} />
+        <DetailList label="Success Criteria" items={record.successCriteria} />
+        <DetailList label="Assumptions" items={record.assumptions} />
+        <DetailList label="Risks (planning)" items={record.risks} />
+      </dl>
+    );
+  }
+
+  if (moduleId === 'indicators') {
+    const rows = (record.indicators || []).filter((item) => isPopulatedRow(item));
+    if (!rows.length) return <p className="text-sm text-slate-500">No indicators were saved for this record.</p>;
+    return (
+      <div className="space-y-3">
+        {rows.map((item, index) => (
+          <DetailCard key={index} title={item.name || `Indicator ${index + 1}`}>
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <DetailField label="Indicator Type" value={item.type} />
+              <DetailField label="Unit of Measure" value={item.unit} />
+              <DetailField label="Data Collection Frequency" value={item.frequency} />
+              <DetailField label="Baseline Value" value={item.baseline} />
+              <DetailField label="Target Value" value={item.target} />
+              <DetailField label="Current Value" value={item.current} />
+              <DetailField label="Description" value={item.description} />
+            </dl>
+          </DetailCard>
+        ))}
+      </div>
+    );
+  }
+
+  if (moduleId === 'activities') {
+    const rows = (record.activities || []).filter((item) => isPopulatedRow(item));
+    if (!rows.length) return <p className="text-sm text-slate-500">No activities were saved for this record.</p>;
+    return (
+      <div className="space-y-3">
+        {rows.map((item, index) => (
+          <DetailCard key={index} title={item.name || `Activity ${index + 1}`}>
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <DetailField label="Activity Name" value={item.name} />
+              <DetailField label="Assigned Staff" value={item.assignedStaff} />
+              <DetailField label="Status" value={item.status} />
+              <DetailField label="Progress %" value={item.progress != null && item.progress !== '' ? pct(item.progress) : '—'} />
+              <DetailField label="Start Date" value={item.startDate} />
+              <DetailField label="End Date" value={item.endDate} />
+              <DetailField label="Budget Used" value={currency(item.budgetUsed)} />
+              <DetailField label="Description" value={item.description} />
+            </dl>
+          </DetailCard>
+        ))}
+      </div>
+    );
+  }
+
+  if (moduleId === 'beneficiaries') {
+    const rows = (record.beneficiaries || []).filter((item) => isPopulatedRow(item));
+    if (!rows.length) return <p className="text-sm text-slate-500">No beneficiaries were saved for this record.</p>;
+    return (
+      <div className="space-y-3">
+        {rows.map((item, index) => (
+          <DetailCard key={index} title={item.name || `Beneficiary ${index + 1}`}>
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <DetailField label="Beneficiary Name" value={item.name} />
+              <DetailField label="Category" value={item.category} />
+              <DetailField label="Location" value={item.location} />
+              <DetailField label="Services Received" value={item.servicesReceived} />
+              <DetailField label="Gender" value={item.gender} />
+              <DetailField label="Age Group" value={item.ageGroup} />
+              <DetailField label="Number Reached" value={item.numberReached} />
+            </dl>
+          </DetailCard>
+        ))}
+      </div>
+    );
+  }
+
+  if (moduleId === 'visits') {
+    const rows = (record.fieldVisits || []).filter((item) => isPopulatedRow(item, ['visitDate', 'fieldOfficer', 'location', 'purpose', 'findings']));
+    if (!rows.length) return <p className="text-sm text-slate-500">No field visits were saved for this record.</p>;
+    return (
+      <div className="space-y-3">
+        {rows.map((item, index) => (
+          <DetailCard key={index} title={item.purpose || item.location || `Visit ${index + 1}`}>
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <DetailField label="Visit Date" value={item.visitDate} />
+              <DetailField label="Field Officer" value={item.fieldOfficer} />
+              <DetailField label="Location" value={item.location} />
+              <DetailField label="Purpose" value={item.purpose} />
+              <DetailField label="Findings" value={item.findings} />
+              <DetailField label="Recommendations" value={item.recommendations} />
+              <DetailField label="Photos" value={item.photos} />
+              <DetailField label="Signatures" value={item.signatures} />
+            </dl>
+          </DetailCard>
+        ))}
+      </div>
+    );
+  }
+
+  if (moduleId === 'risks') {
+    const rows = (record.riskIssues || []).filter((item) => isPopulatedRow(item));
+    return (
+      <div className="space-y-4">
+        {rows.length ? (
+          <div className="space-y-3">
+            {rows.map((item, index) => (
+              <DetailCard key={index} title={item.description || item.riskId || `Risk ${index + 1}`}>
+                <dl className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <DetailField label="Risk ID" value={item.riskId} />
+                  <DetailField label="Severity" value={item.severity} />
+                  <DetailField label="Status" value={item.status} />
+                  <DetailField label="Mitigation Plan" value={item.mitigationPlan} />
+                  <DetailField label="Responsible Person" value={item.responsiblePerson} />
+                </dl>
+              </DetailCard>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">No risk issues were saved for this record.</p>
+        )}
+        <DetailField label="Notes" value={record.notes} />
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function ArrayEditor({ id, title, items, onChange, template, children }) {
@@ -407,71 +599,120 @@ function ArrayEditor({ id, title, items, onChange, template, children }) {
   );
 }
 
-function DrawerShell({ open, mode, title, saving, onClose, onSave, activeSection, setActiveSection, children }) {
+function MeFormStepIndicator({ steps, currentIndex }) {
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-1 overflow-x-auto pb-1">
+        {steps.map((step, index) => {
+          const complete = index < currentIndex;
+          const active = index === currentIndex;
+          const Icon = step.icon;
+          return (
+            <React.Fragment key={step.id}>
+              <div
+                className={`flex items-center gap-2 shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  active ? 'bg-emerald-600 text-white shadow-sm' : complete ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                }`}
+              >
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                    active ? 'bg-white text-emerald-700' : complete ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {complete ? <CheckCircle2 size={14} /> : <Icon size={14} />}
+                </span>
+                <span className="whitespace-nowrap">{step.label}</span>
+              </div>
+              {index < steps.length - 1 && (
+                <div className={`h-0.5 w-3 sm:w-6 shrink-0 rounded ${complete ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-sm text-slate-600">
+        Step {currentIndex + 1} of {steps.length}:{' '}
+        <span className="font-semibold text-slate-900">{steps[currentIndex].label}</span>
+      </p>
+    </div>
+  );
+}
+
+function DrawerShell({
+  open,
+  mode,
+  title,
+  saving,
+  onClose,
+  onSaveAndContinue,
+  stepIndex,
+  onBack,
+  onNext,
+  children
+}) {
   if (!open) return null;
 
   const isView = mode === 'view';
+  const isLastStep = stepIndex >= FORM_STEPS.length - 1;
+  const isFirstStep = stepIndex === 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-sm">
-      <div className="absolute right-0 top-0 h-full w-full max-w-6xl bg-white shadow-2xl flex flex-col">
+      <div className="absolute right-0 top-0 h-full w-full max-w-4xl bg-white shadow-2xl flex flex-col">
         <div className="shrink-0 border-b border-slate-200 px-5 py-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-emerald-700">Monitoring & Evaluation</p>
-            <h2 className="text-xl font-bold text-slate-900">{title}</h2>
+            <h2 className="text-base sm:text-xl font-bold text-slate-900">{title}</h2>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100" title="Close">
             <X size={22} />
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className="border-r border-slate-200 bg-slate-50 p-4 overflow-y-auto">
-            <p className="text-xs font-semibold uppercase text-slate-500 mb-3">M&E form sections</p>
-            <div className="space-y-1">
-              {MODULES.map((module) => {
-                const Icon = module.icon;
-                const active = activeSection === module.id;
-                return (
-                  <button
-                    key={module.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveSection(module.id);
-                      document.getElementById(`me-section-${module.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors ${
-                      active ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-700 hover:bg-white hover:text-slate-950'
-                    }`}
-                  >
-                    <Icon size={17} />
-                    <span className="font-medium">{module.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </aside>
-
-          <div className="min-h-0 overflow-y-auto p-5 lg:p-6">
-            {children}
-          </div>
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 lg:p-6">
+          <MeFormStepIndicator steps={FORM_STEPS} currentIndex={stepIndex} />
+          {children}
         </div>
 
-        <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-4 flex justify-end gap-3">
-          <button type="button" onClick={onClose} className="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">
-            {isView ? 'Close' : 'Cancel'}
-          </button>
-          {!isView && (
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={saving}
-              className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-2"
-            >
-              {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-              Save M&E Record
+        <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-4 flex items-center justify-between gap-3">
+          <div>
+            {!isFirstStep && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 flex items-center gap-2"
+              >
+                <ChevronLeft size={18} />
+                Back
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onClose} className="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">
+              {isView ? 'Close' : 'Cancel'}
             </button>
-          )}
+            {isView && !isLastStep && (
+              <button
+                type="button"
+                onClick={onNext}
+                className="px-5 py-2.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 flex items-center gap-2"
+              >
+                Next
+                <ChevronRight size={18} />
+              </button>
+            )}
+            {!isView && (
+              <button
+                type="button"
+                onClick={onSaveAndContinue}
+                disabled={saving}
+                className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-2 font-semibold"
+              >
+                {saving ? <Loader2 size={18} className="animate-spin" /> : isLastStep ? <Save size={18} /> : <ChevronRight size={18} />}
+                {isLastStep ? 'Save M&E Record' : 'Save & Continue'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -479,6 +720,7 @@ function DrawerShell({ open, mode, title, saving, onClose, onSave, activeSection
 }
 
 export default function Contracts() {
+  const popup = usePopup();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOrg, setFilterOrg] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -486,10 +728,9 @@ export default function Contracts() {
   const [modalMode, setModalMode] = useState('add');
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
-  const [activeModule, setActiveModule] = useState('analytics');
-  const [activeFormSection, setActiveFormSection] = useState('project');
+  const [activeModule, setActiveModule] = useState('outcomes');
+  const [formStepIndex, setFormStepIndex] = useState(0);
   const [selectedWorkspaceRecordId, setSelectedWorkspaceRecordId] = useState('');
-  const [moduleForms, setModuleForms] = useState(EMPTY_MODULE_FORMS);
 
   const listParams = useMemo(() => {
     const params = {};
@@ -500,30 +741,65 @@ export default function Contracts() {
 
   const { data: organizations = [] } = useGetNgoOrganizationsQuery();
   const { data: projects = [] } = useGetNgoProjectsQuery(filterOrg ? { organizationId: filterOrg } : undefined);
+  const staffOrgId = formData.organizationId || filterOrg;
+  const { data: staffMembers = [] } = useGetNgoUsersQuery(
+    staffOrgId ? { organizationId: staffOrgId } : undefined,
+    { skip: !staffOrgId }
+  );
+  const activeStaff = useMemo(
+    () =>
+      staffMembers.filter((member) => {
+        const status = String(member.accountStatus || member.status || 'Active').toLowerCase();
+        return !['suspended', 'locked'].includes(status);
+      }),
+    [staffMembers]
+  );
   const { data: records = [], isLoading, error, refetch } = useGetNgoContractsQuery(listParams);
   const { data: summary } = useGetNgoMonitoringSummaryQuery(listParams);
   const [createRecord, { isLoading: creating }] = useCreateNgoContractMutation();
-  const [updateRecord, { isLoading: updating }] = useUpdateNgoContractMutation();
+  const [patchRecord, { isLoading: updating }] = usePatchNgoContractMutation();
   const [deleteRecord] = useDeleteNgoContractMutation();
 
   const projectById = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const orgById = useMemo(() => Object.fromEntries(organizations.map((org) => [org.id, org])), [organizations]);
+  const recordByProjectId = useMemo(() => {
+    const map = {};
+    records.forEach((record) => {
+      if (record.projectId) map[record.projectId] = record;
+    });
+    return map;
+  }, [records]);
+
+  const getExistingRecordForProject = (projectId, excludeRecordId) => {
+    if (!projectId) return null;
+    const existing = recordByProjectId[projectId];
+    if (!existing) return null;
+    if (excludeRecordId && String(existing.id) === String(excludeRecordId)) return null;
+    return existing;
+  };
+
+  const isProjectLinkChanged = (nextProjectId, baselineProjectId) =>
+    Boolean(nextProjectId) && String(nextProjectId) !== String(baselineProjectId || '');
+
+  const notifyExistingMeRecord = () => {
+    popup.alert({ title: 'M&E record exists', message: ME_RECORD_EXISTS_NOTICE });
+  };
   const saving = creating || updating;
 
-  const localTotals = useMemo(() => calculateTotals(records), [records]);
+  const localTotals = useMemo(() => formatDashboardTotals(records), [records]);
   const totals = useMemo(() => {
     if (!summary) return localTotals;
     return {
       ...localTotals,
-      budget: Number(summary.budget) || localTotals.budget,
-      expense: Number(summary.expense) || localTotals.expense,
-      activities: Number(summary.activities) || localTotals.activities,
-      activitiesCompleted: Number(summary.activitiesCompleted) || localTotals.activitiesCompleted,
-      beneficiariesReached: Number(summary.beneficiariesReached) || localTotals.beneficiariesReached,
-      budgetUtilization: Number(summary.budgetUtilization) || localTotals.budgetUtilization,
-      activityCompletion: Number(summary.activityCompletion) || localTotals.activityCompletion,
-      performance: Number(summary.performance) || localTotals.performance,
-      projectCompletion: Number(summary.projectCompletion) || localTotals.projectCompletion
+      budget: summary.budget ?? localTotals.budget,
+      expense: summary.expense ?? localTotals.expense,
+      activities: summary.activities ?? localTotals.activities,
+      activitiesCompleted: summary.activitiesCompleted ?? localTotals.activitiesCompleted,
+      beneficiariesReached: summary.beneficiariesReached ?? localTotals.beneficiariesReached,
+      budgetUtilization: formatUtilizationPercent(summary.budgetUtilization ?? localTotals.budgetUtilization),
+      activityCompletion: formatUtilizationPercent(summary.activityCompletion ?? localTotals.activityCompletion),
+      performance: formatUtilizationPercent(summary.performance ?? localTotals.performance),
+      projectCompletion: formatUtilizationPercent(summary.projectCompletion ?? localTotals.projectCompletion)
     };
   }, [localTotals, summary]);
 
@@ -533,242 +809,173 @@ export default function Contracts() {
       .some((value) => String(value || '').toLowerCase().includes(term));
   });
 
-  const selectedWorkspaceRecord =
-    records.find((record) => record.id === selectedWorkspaceRecordId) ||
-    filteredRecords[0] ||
-    records[0] ||
-    null;
+  const selectedWorkspaceRecord = records.find((record) => record.id === selectedWorkspaceRecordId) || null;
 
-  const patchModuleForm = (module, patch) => {
-    setModuleForms((current) => ({
-      ...current,
-      [module]: {
-        ...current[module],
-        ...patch
-      }
-    }));
+  const selectWorkspaceRecord = (record) => {
+    if (record?.id) setSelectedWorkspaceRecordId(record.id);
   };
 
   const openAdd = () => {
-    const firstProject = projects[0];
+    const availableProject = projects.find((project) => !recordByProjectId[project.id]);
     setModalMode('add');
-    setActiveFormSection('project');
+    setFormStepIndex(0);
     setSelectedRecord(null);
     setFormData({
       ...EMPTY_FORM,
-      organizationId: filterOrg || organizations[0]?.id || '',
-      projectId: firstProject?.id || '',
-      projectCode: firstProject?.code || '',
-      projectName: firstProject?.name || '',
-      program: firstProject?.programArea || '',
-      donor: firstProject?.donor || '',
-      projectManager: firstProject?.manager || '',
-      budget: firstProject?.budget || 0
+      organizationId: filterOrg || organizations[0]?.id || availableProject?.organizationId || '',
+      ...(availableProject ? projectToFormFields(availableProject) : {})
     });
     setShowModal(true);
   };
 
-  const openRecord = (record, mode) => {
+  const formStepIndexForModule = (moduleId) => {
+    const index = FORM_STEPS.findIndex((step) => step.id === moduleId);
+    return index >= 0 ? index : 0;
+  };
+
+  const openRecord = (record, mode, moduleId = 'project') => {
     setModalMode(mode);
-    setActiveFormSection('project');
+    setFormStepIndex(formStepIndexForModule(moduleId));
     setSelectedRecord(record);
     setFormData(normalizeRecord(record));
     setShowModal(true);
   };
 
   const handleProjectChange = (projectId) => {
+    if (!projectId) {
+      setFormData({
+        ...formData,
+        projectId: '',
+        projectCode: '',
+        projectName: '',
+        program: '',
+        projectManager: '',
+        donor: '',
+        startDate: '',
+        endDate: '',
+        status: 'Planning',
+        budget: 0
+      });
+      return;
+    }
+    const excludeId = selectedRecord?.id;
+    if (
+      projectId !== formData.projectId &&
+      getExistingRecordForProject(projectId, excludeId)
+    ) {
+      notifyExistingMeRecord();
+      return;
+    }
     const project = projectById[projectId];
     setFormData({
       ...formData,
       projectId,
-      organizationId: project?.organizationId || formData.organizationId,
-      projectCode: project?.code || formData.projectCode,
-      projectName: project?.name || formData.projectName,
-      program: project?.programArea || formData.program,
-      donor: project?.donor || formData.donor,
-      projectManager: project?.manager || formData.projectManager,
-      startDate: project?.startDate || formData.startDate,
-      endDate: project?.endDate || formData.endDate,
-      budget: project?.budget ?? formData.budget
+      ...(project ? projectToFormFields(project) : {})
     });
   };
 
-  const handleSave = async () => {
-    if (!formData.organizationId || !formData.projectName.trim()) {
-      alert('Organization and Project Name are required.');
-      return;
-    }
-    try {
-      const payload = buildPayload(formData);
-      if (modalMode === 'add') {
-        await createRecord(payload).unwrap();
-      } else {
-        await updateRecord({ id: selectedRecord.id, ...payload }).unwrap();
+  const validateFormStep = (stepId) => {
+    if (stepId === 'project') {
+      if (!formData.organizationId) {
+        popup.alert('Organization is required.');
+        return false;
       }
+      if (!formData.projectId) {
+        popup.alert('Please select a linked project.');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const persistFormRecord = async (closeOnSuccess) => {
+    const stepId = FORM_STEPS[formStepIndex].id;
+    if (!validateFormStep(stepId)) return false;
+
+    const stepPayload = buildStepPayload(formData, stepId);
+    let recordId = selectedRecord?.id;
+
+    if (modalMode === 'add' && !recordId) {
+      if (getExistingRecordForProject(stepPayload.projectId)) {
+        notifyExistingMeRecord();
+        return false;
+      }
+      const created = await createRecord(stepPayload).unwrap();
+      setSelectedRecord(created);
+      setModalMode('edit');
+      recordId = created.id;
+    } else {
+      if (!recordId) {
+        popup.alert('Save project information first.');
+        return false;
+      }
+      const baselineProjectId = selectedRecord?.projectId;
+      if (
+        stepId === 'project' &&
+        isProjectLinkChanged(stepPayload.projectId, baselineProjectId) &&
+        getExistingRecordForProject(stepPayload.projectId, recordId)
+      ) {
+        notifyExistingMeRecord();
+        return false;
+      }
+      const updated = await patchRecord({ id: recordId, ...stepPayload }).unwrap();
+      setSelectedRecord((current) => ({ ...current, ...updated }));
+    }
+
+    if (closeOnSuccess) {
+      if (recordId) setSelectedWorkspaceRecordId(recordId);
       setShowModal(false);
+    }
+    return true;
+  };
+
+  const handleSaveAndContinue = async () => {
+    const isLastStep = formStepIndex >= FORM_STEPS.length - 1;
+    try {
+      const saved = await persistFormRecord(isLastStep);
+      if (!saved) return;
+      if (!isLastStep) {
+        setFormStepIndex((index) => index + 1);
+      }
     } catch (err) {
-      alert('Failed to save M&E record: ' + getNgoErrorMessage(err, 'Unknown error'));
+      popup.toast.error('Failed to save M&E record: ' + getNgoErrorMessage(err, 'Unknown error'));
     }
   };
 
+  const handleFormBack = () => {
+    setFormStepIndex((index) => Math.max(0, index - 1));
+  };
+
+  const handleFormNext = () => {
+    setFormStepIndex((index) => Math.min(FORM_STEPS.length - 1, index + 1));
+  };
+
   const handleDelete = async (record) => {
-    if (!window.confirm(`Delete M&E record for "${record.projectName}"?`)) return;
+    const confirmed = await popup.confirm({
+      title: 'Delete M&E record',
+      message: `Delete M&E record for "${record.projectName}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
     try {
       await deleteRecord(record.id).unwrap();
+      popup.toast.success('M&E record deleted.');
     } catch (err) {
-      alert('Failed to delete M&E record: ' + getNgoErrorMessage(err, 'Unknown error'));
+      popup.toast.error('Failed to delete M&E record: ' + getNgoErrorMessage(err, 'Unknown error'));
     }
   };
 
   const handleExport = (format) => {
-    alert(`${format} export is prepared from the reports module.`);
-  };
-
-  const saveModuleEntry = async (module) => {
-    if (module === 'analytics') {
-      refetch();
-      return;
-    }
-
-    if (module === 'project') {
-      openAdd();
-      return;
-    }
-
-    if (!selectedWorkspaceRecord) {
-      alert('Create or select an M&E project record first.');
-      return;
-    }
-
-    const current = selectedWorkspaceRecord;
-    const form = moduleForms[module];
-    let patch = {};
-
-    if (module === 'outcomes') {
-      patch = {
-        goal: form.goal || current.goal || '',
-        objectives: splitLines(form.objectives),
-        expectedOutcomes: splitLines(form.expectedOutcomes),
-        expectedOutputs: splitLines(form.expectedOutputs),
-        successCriteria: splitLines(form.successCriteria),
-        assumptions: splitLines(form.assumptions),
-        risks: splitLines(form.risks)
-      };
-    }
-
-    if (module === 'indicators') {
-      patch = {
-        indicators: [
-          ...(Array.isArray(current.indicators) ? current.indicators : []),
-          {
-            ...form,
-            baseline: Number(form.baseline) || 0,
-            target: Number(form.target) || 0,
-            current: Number(form.current) || 0
-          }
-        ]
-      };
-    }
-
-    if (module === 'activities') {
-      patch = {
-        activities: [
-          ...(Array.isArray(current.activities) ? current.activities : []),
-          {
-            ...form,
-            budgetUsed: Number(form.budgetUsed) || 0,
-            progress: Number(form.progress) || 0
-          }
-        ]
-      };
-    }
-
-    if (module === 'beneficiaries') {
-      patch = {
-        beneficiaries: [
-          ...(Array.isArray(current.beneficiaries) ? current.beneficiaries : []),
-          {
-            ...form,
-            numberReached: Number(form.numberReached) || 0
-          }
-        ]
-      };
-    }
-
-    if (module === 'data') {
-      patch = {
-        dataCollection: form.dataCollection,
-        notes: form.notes || current.notes || ''
-      };
-    }
-
-    if (module === 'visits') {
-      patch = {
-        fieldVisits: [
-          ...(Array.isArray(current.fieldVisits) ? current.fieldVisits : []),
-          form
-        ]
-      };
-    }
-
-    if (module === 'risks') {
-      patch = {
-        riskIssues: [
-          ...(Array.isArray(current.riskIssues) ? current.riskIssues : []),
-          form
-        ]
-      };
-    }
-
-    if (module === 'kpi') {
-      patch = {
-        expense: Number(form.expense) || 0,
-        performance: Number(form.performance) || 0,
-        completion: Number(form.completion) || 0
-      };
-    }
-
-    if (module === 'reports') {
-      patch = {
-        reports: [
-          ...(Array.isArray(current.reports) ? current.reports : []),
-          form
-        ]
-      };
-    }
-
-    if (module === 'gis') {
-      patch = {
-        gisLocations: [
-          ...(Array.isArray(current.gisLocations) ? current.gisLocations : []),
-          form
-        ],
-        branchRegion: form.region || current.branchRegion,
-        targetArea: form.district || current.targetArea
-      };
-    }
-
-    try {
-      await updateRecord({ id: current.id, ...current, ...patch }).unwrap();
-      setModuleForms((currentForms) => ({ ...currentForms, [module]: EMPTY_MODULE_FORMS[module] }));
-    } catch (err) {
-      alert('Failed to save module form: ' + getNgoErrorMessage(err, 'Unknown error'));
-    }
+    popup.toast.info(`${format} export is prepared from the reports module.`);
   };
 
   const errorMessage = error ? getNgoErrorMessage(error, 'Failed to fetch monitoring records') : null;
   const isView = modalMode === 'view';
-  const activeModuleConfig = MODULES.find((module) => module.id === activeModule) || MODULES[0];
-  const ActiveModuleIcon = activeModuleConfig.icon;
-  const highRisks = records.reduce((sum, record) => {
-    const risks = Array.isArray(record.riskIssues) ? record.riskIssues : [];
-    return sum + risks.filter((risk) => String(risk.severity || '').toLowerCase() === 'high').length;
-  }, 0);
-  const moduleSaveLabel = activeModule === 'project'
-    ? 'Create Project Record'
-    : activeModule === 'analytics'
-      ? 'Refresh Analytics'
-      : `Save ${activeModuleConfig.label}`;
+  const activeFormStep = FORM_STEPS[formStepIndex];
+  const activeWorkspaceModule =
+    WORKSPACE_MODULES.find((module) => module.id === activeModule) || WORKSPACE_MODULES[0];
+  const ActiveModuleIcon = activeWorkspaceModule.icon;
 
   return (
     <div className="space-y-6">
@@ -778,9 +985,9 @@ export default function Contracts() {
             <BarChart3 size={18} />
             <span>Monitoring & Evaluation</span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">Professional M&E Workspace</h1>
+          <h1 className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">Professional M&E Workspace</h1>
           <p className="mt-1 text-slate-600">
-            Manage project information, outcomes, indicators, activities, beneficiaries, field evidence, risks, reports, GIS, and analytics.
+            Create records with New Project Record, then select a record and browse M&E modules to review what was saved.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -808,25 +1015,27 @@ export default function Contracts() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard icon={Users} label="Beneficiaries reached" value={(totals.beneficiariesReached || 0).toLocaleString()} caption="Across selected records" />
-        <StatCard icon={FileSpreadsheet} label="Budget utilization" value={pct(totals.budgetUtilization)} caption={`${currency(totals.expense)} of ${currency(totals.budget)}`} />
-        <StatCard icon={CheckCircle2} label="Activities completed" value={pct(totals.activityCompletion)} caption={`${totals.activitiesCompleted || 0} of ${totals.activities || 0} activities`} />
-        <StatCard icon={TrendingUp} label="Project performance" value={pct(totals.performance)} caption={`${pct(totals.projectCompletion)} average completion`} />
+        <StatCard icon={FileSpreadsheet} label="Budget utilization" value={formatPercentDisplay(totals.budgetUtilization)} caption={`${currency(totals.expense)} of ${currency(totals.budget)}`} />
+        <StatCard icon={CheckCircle2} label="Activities completed" value={formatPercentDisplay(totals.activityCompletion)} caption={`Average progress across ${totals.activities || 0} ${totals.activities === 1 ? 'activity' : 'activities'}`} />
+        <StatCard icon={TrendingUp} label="Project performance" value={formatPercentDisplay(totals.performance)} caption={`${formatPercentDisplay(totals.projectCompletion)} average completion`} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-4">
         <aside className="bg-white border border-slate-200 rounded-lg p-4">
           <h2 className="text-lg font-bold text-slate-900">M&E Modules</h2>
-          <p className="mt-1 text-sm text-slate-500">Open each feature area from this workspace sidebar.</p>
+          <p className="mt-1 text-sm text-slate-500">Select a record, then open each section to review saved details.</p>
           <div className="mt-4 space-y-1">
-            {MODULES.map((module) => {
+            {WORKSPACE_MODULES.map((module) => {
               const Icon = module.icon;
               const active = activeModule === module.id;
+              const disabled = !selectedWorkspaceRecord;
               return (
                 <button
                   key={module.id}
                   type="button"
+                  disabled={disabled}
                   onClick={() => setActiveModule(module.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
                     active ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-50'
                   }`}
                 >
@@ -839,252 +1048,79 @@ export default function Contracts() {
         </aside>
 
         <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <div className="flex items-center justify-between gap-3 mb-5">
+          <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50/80 p-4">
+            <label className="block text-sm font-semibold text-emerald-950 mb-2">M&E record</label>
+            <select
+              value={selectedWorkspaceRecordId}
+              onChange={(e) => setSelectedWorkspaceRecordId(e.target.value)}
+              className={NGO_INPUT_CLASS}
+            >
+              <option value="">Select a record to view…</option>
+              {records.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.projectName || 'Untitled project'} ({record.projectCode || record.projectId || record.id})
+                </option>
+              ))}
+            </select>
+            {selectedWorkspaceRecord && (
+              <p className="mt-2 text-xs text-emerald-800">
+                {orgById[selectedWorkspaceRecord.organizationId]?.name || 'Organization'} · {selectedWorkspaceRecord.status || 'Planning'}
+                {selectedWorkspaceRecord.program ? ` · ${selectedWorkspaceRecord.program}` : ''}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-start justify-between gap-3 mb-5">
             <div>
               <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
                 <ActiveModuleIcon size={18} />
-                <span>{activeModuleConfig.label}</span>
+                <span>{activeWorkspaceModule.label}</span>
               </div>
               <h2 className="mt-1 text-lg font-bold text-slate-900">
-                {activeModule === 'analytics' ? 'Professional Analytics Dashboard' : `Create ${activeModuleConfig.label}`}
+                {selectedWorkspaceRecord ? activeWorkspaceModule.label : 'Select a record'}
               </h2>
               <p className="text-sm text-slate-500">
-                {activeModule === 'analytics'
-                  ? 'Target vs actual, budget vs expense, beneficiary growth, activity trend, gender distribution, and geographic impact.'
-                  : 'This module has its own form and saves only this feature into the selected M&E project record.'}
+                {selectedWorkspaceRecord
+                  ? `Saved data from New Project Record for ${selectedWorkspaceRecord.projectName || 'this project'}.`
+                  : 'Choose an M&E record above, or pick one from the table below, then browse modules on the left.'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => saveModuleEntry(activeModule)}
-              disabled={updating && activeModule !== 'project'}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-2 text-sm font-semibold"
-            >
-              {updating && activeModule !== 'project' ? <Loader2 size={17} className="animate-spin" /> : <Plus size={17} />}
-              {moduleSaveLabel}
-            </button>
+            {selectedWorkspaceRecord && (
+              <button
+                type="button"
+                onClick={() => openRecord(selectedWorkspaceRecord, 'edit', activeWorkspaceModule.id)}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center gap-2 text-sm font-semibold shrink-0"
+              >
+                <Edit size={17} />
+                Edit {activeWorkspaceModule.label}
+              </button>
+            )}
           </div>
 
-          {activeModule !== 'analytics' && activeModule !== 'project' && (
-            <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Save this module under</label>
-              <select
-                value={selectedWorkspaceRecord?.id || ''}
-                onChange={(e) => setSelectedWorkspaceRecordId(e.target.value)}
-                className={NGO_INPUT_CLASS}
-              >
-                {records.map((record) => (
-                  <option key={record.id} value={record.id}>
-                    {record.projectName || 'Untitled project'} ({record.projectCode || record.projectId || record.id})
-                  </option>
-                ))}
-              </select>
+          {!selectedWorkspaceRecord && (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 py-14 px-6 text-center">
+              <ClipboardList className="mx-auto text-slate-400 mb-3" size={40} />
+              <p className="text-slate-700 font-medium">No record selected</p>
+              <p className="mt-1 text-sm text-slate-500 max-w-md mx-auto">
+                {records.length
+                  ? 'Select a record from the dropdown, or click a row in the table below to load its M&E details.'
+                  : 'Create your first M&E record with New Project Record, then return here to review it by module.'}
+              </p>
+              {!records.length && (
+                <button type="button" onClick={openAdd} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 inline-flex items-center gap-2 text-sm font-semibold">
+                  <Plus size={17} />
+                  New Project Record
+                </button>
+              )}
             </div>
           )}
 
-          {activeModule === 'analytics' && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <MiniBar label="Target vs Actual Results" value={totals.targetVsActual || totals.performance} />
-                <MiniBar label="Budget vs Expense" value={totals.budgetUtilization} tone="blue" />
-                <MiniBar label="Beneficiary Growth" value={Math.min(100, (totals.beneficiariesReached || 0) / 100)} />
-                <MiniBar label="Activity Completion Trend" value={totals.activityCompletion} tone="amber" />
-                <MiniBar label="Project Performance" value={totals.performance} />
-                <MiniBar label="Geographic Impact Coverage" value={totals.projectCompletion} tone="blue" />
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <p className="text-xs text-slate-500">Records</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">{totals.projects}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <p className="text-xs text-slate-500">Indicators</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">{records.reduce((sum, record) => sum + (record.indicators?.length || 0), 0)}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <p className="text-xs text-slate-500">Open risks</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">{highRisks}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <p className="text-xs text-slate-500">Mapped areas</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">{records.filter((record) => record.branchRegion || record.targetArea).length}</p>
-                </div>
-              </div>
-            </>
-          )}
-
-          {activeModule === 'project' && (
-            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-5">
-              <h3 className="text-base font-bold text-emerald-950">Project Information Form</h3>
-              <p className="mt-1 text-sm text-emerald-800">Create the core M&E project record first. Other module forms save into that selected project record.</p>
-              <button type="button" onClick={openAdd} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 inline-flex items-center gap-2">
-                <Plus size={17} />
-                Create Project Information
-              </button>
-            </div>
-          )}
-
-          {activeModule === 'outcomes' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <NGOFormField label="Project Goal" colSpan={2}><textarea rows={2} value={moduleForms.outcomes.goal} onChange={(e) => patchModuleForm('outcomes', { goal: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              {[
-                ['Objectives', 'objectives'],
-                ['Expected Outcomes', 'expectedOutcomes'],
-                ['Expected Outputs', 'expectedOutputs'],
-                ['Success Criteria', 'successCriteria'],
-                ['Assumptions', 'assumptions'],
-                ['Risks', 'risks']
-              ].map(([label, key]) => (
-                <NGOFormField key={key} label={label} colSpan={2} hint="One item per line">
-                  <textarea rows={3} value={moduleForms.outcomes[key]} onChange={(e) => patchModuleForm('outcomes', { [key]: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-              ))}
-            </div>
-          )}
-
-          {activeModule === 'indicators' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <NGOFormField label="Indicator ID"><input value={moduleForms.indicators.indicatorId} onChange={(e) => patchModuleForm('indicators', { indicatorId: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Indicator Name"><input value={moduleForms.indicators.name} onChange={(e) => patchModuleForm('indicators', { name: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Indicator Type"><select value={moduleForms.indicators.type} onChange={(e) => patchModuleForm('indicators', { type: e.target.value })} className={NGO_INPUT_CLASS}>{INDICATOR_TYPES.map((x) => <option key={x}>{x}</option>)}</select></NGOFormField>
-              <NGOFormField label="Unit of Measure"><select value={moduleForms.indicators.unit} onChange={(e) => patchModuleForm('indicators', { unit: e.target.value })} className={NGO_INPUT_CLASS}>{UNIT_OPTIONS.map((x) => <option key={x}>{x}</option>)}</select></NGOFormField>
-              <NGOFormField label="Description" colSpan={2}><input value={moduleForms.indicators.description} onChange={(e) => patchModuleForm('indicators', { description: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Baseline Value"><input type="number" value={moduleForms.indicators.baseline} onChange={(e) => patchModuleForm('indicators', { baseline: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Target Value"><input type="number" value={moduleForms.indicators.target} onChange={(e) => patchModuleForm('indicators', { target: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Current Value"><input type="number" value={moduleForms.indicators.current} onChange={(e) => patchModuleForm('indicators', { current: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Data Collection Frequency"><select value={moduleForms.indicators.frequency} onChange={(e) => patchModuleForm('indicators', { frequency: e.target.value })} className={NGO_INPUT_CLASS}>{FREQUENCY_OPTIONS.map((x) => <option key={x}>{x}</option>)}</select></NGOFormField>
-            </div>
-          )}
-
-          {activeModule === 'activities' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <NGOFormField label="Activity Name"><input value={moduleForms.activities.name} onChange={(e) => patchModuleForm('activities', { name: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Assigned Staff"><input value={moduleForms.activities.assignedStaff} onChange={(e) => patchModuleForm('activities', { assignedStaff: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Status"><select value={moduleForms.activities.status} onChange={(e) => patchModuleForm('activities', { status: e.target.value })} className={NGO_INPUT_CLASS}>{['Pending', 'Ongoing', 'Completed'].map((x) => <option key={x}>{x}</option>)}</select></NGOFormField>
-              <NGOFormField label="Progress %"><input type="number" value={moduleForms.activities.progress} onChange={(e) => patchModuleForm('activities', { progress: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Activity Description" colSpan={2}><input value={moduleForms.activities.description} onChange={(e) => patchModuleForm('activities', { description: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Start Date"><input type="date" value={moduleForms.activities.startDate} onChange={(e) => patchModuleForm('activities', { startDate: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="End Date"><input type="date" value={moduleForms.activities.endDate} onChange={(e) => patchModuleForm('activities', { endDate: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Budget Used"><input type="number" value={moduleForms.activities.budgetUsed} onChange={(e) => patchModuleForm('activities', { budgetUsed: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-            </div>
-          )}
-
-          {activeModule === 'beneficiaries' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {[
-                ['Beneficiary ID', 'beneficiaryId'],
-                ['Beneficiary Name', 'name'],
-                ['Category', 'category'],
-                ['Location', 'location'],
-                ['Services Received', 'servicesReceived'],
-                ['Gender', 'gender'],
-                ['Age Group', 'ageGroup']
-              ].map(([label, key]) => (
-                <NGOFormField key={key} label={label}><input value={moduleForms.beneficiaries[key]} onChange={(e) => patchModuleForm('beneficiaries', { [key]: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              ))}
-              <NGOFormField label="Number Reached"><input type="number" value={moduleForms.beneficiaries.numberReached} onChange={(e) => patchModuleForm('beneficiaries', { numberReached: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-            </div>
-          )}
-
-          {activeModule === 'data' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {['Survey Forms', 'Questionnaires', 'Field Reports', 'Mobile Data Collection', 'GPS Location', 'Photos', 'Video Uploads', 'Supporting Documents'].map((item) => (
-                  <label key={item} className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={moduleForms.data.dataCollection.includes(item)}
-                      onChange={(e) => patchModuleForm('data', {
-                        dataCollection: e.target.checked
-                          ? [...moduleForms.data.dataCollection, item]
-                          : moduleForms.data.dataCollection.filter((value) => value !== item)
-                      })}
-                    />
-                    {item}
-                  </label>
-                ))}
-              </div>
-              <NGOFormField label="Supporting Notes"><textarea rows={3} value={moduleForms.data.notes} onChange={(e) => patchModuleForm('data', { notes: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-            </div>
-          )}
-
-          {activeModule === 'visits' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {[
-                ['Visit Date', 'visitDate', 'date'],
-                ['Field Officer', 'fieldOfficer'],
-                ['Location', 'location'],
-                ['Purpose', 'purpose'],
-                ['Findings', 'findings'],
-                ['Recommendations', 'recommendations'],
-                ['Photos', 'photos'],
-                ['Signatures', 'signatures']
-              ].map(([label, key, type]) => (
-                <NGOFormField key={key} label={label}><input type={type || 'text'} value={moduleForms.visits[key]} onChange={(e) => patchModuleForm('visits', { [key]: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              ))}
-            </div>
-          )}
-
-          {activeModule === 'risks' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <NGOFormField label="Risk ID"><input value={moduleForms.risks.riskId} onChange={(e) => patchModuleForm('risks', { riskId: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Severity"><select value={moduleForms.risks.severity} onChange={(e) => patchModuleForm('risks', { severity: e.target.value })} className={NGO_INPUT_CLASS}>{SEVERITY_OPTIONS.map((x) => <option key={x}>{x}</option>)}</select></NGOFormField>
-              <NGOFormField label="Status"><input value={moduleForms.risks.status} onChange={(e) => patchModuleForm('risks', { status: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Risk Description"><input value={moduleForms.risks.description} onChange={(e) => patchModuleForm('risks', { description: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Mitigation Plan"><input value={moduleForms.risks.mitigationPlan} onChange={(e) => patchModuleForm('risks', { mitigationPlan: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Responsible Person"><input value={moduleForms.risks.responsiblePerson} onChange={(e) => patchModuleForm('risks', { responsiblePerson: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-            </div>
-          )}
-
-          {activeModule === 'kpi' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <NGOFormField label="Budget Expense"><input type="number" value={moduleForms.kpi.expense} onChange={(e) => patchModuleForm('kpi', { expense: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Performance %"><input type="number" value={moduleForms.kpi.performance} onChange={(e) => patchModuleForm('kpi', { performance: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Project Completion %"><input type="number" value={moduleForms.kpi.completion} onChange={(e) => patchModuleForm('kpi', { completion: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-            </div>
-          )}
-
-          {activeModule === 'reports' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <NGOFormField label="Report Type"><select value={moduleForms.reports.type} onChange={(e) => patchModuleForm('reports', { type: e.target.value })} className={NGO_INPUT_CLASS}>{REPORT_TYPES.map((x) => <option key={x}>{x}</option>)}</select></NGOFormField>
-              <NGOFormField label="Period"><input value={moduleForms.reports.period} onChange={(e) => patchModuleForm('reports', { period: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Prepared By"><input value={moduleForms.reports.preparedBy} onChange={(e) => patchModuleForm('reports', { preparedBy: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Status"><input value={moduleForms.reports.status} onChange={(e) => patchModuleForm('reports', { status: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              <NGOFormField label="Export" colSpan={2}>
-                <div className="grid grid-cols-3 gap-2">
-                  {EXPORT_TYPES.map((item) => (
-                    <label key={item} className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={moduleForms.reports.exportFormats.includes(item)}
-                        onChange={(e) => patchModuleForm('reports', {
-                          exportFormats: e.target.checked
-                            ? [...moduleForms.reports.exportFormats, item]
-                            : moduleForms.reports.exportFormats.filter((value) => value !== item)
-                        })}
-                      />
-                      {item}
-                    </label>
-                  ))}
-                </div>
-              </NGOFormField>
-            </div>
-          )}
-
-          {activeModule === 'gis' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[
-                ['Region', 'region'],
-                ['District', 'district'],
-                ['Sector', 'sector'],
-                ['Village', 'village'],
-                ['GPS Coordinates', 'coordinates'],
-                ['Project Activity Map', 'activityMap']
-              ].map(([label, key]) => (
-                <NGOFormField key={key} label={label}><input value={moduleForms.gis[key]} onChange={(e) => patchModuleForm('gis', { [key]: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-              ))}
-            </div>
+          {selectedWorkspaceRecord && (
+            <MeRecordModuleView
+              record={selectedWorkspaceRecord}
+              moduleId={activeWorkspaceModule.id}
+              orgById={orgById}
+            />
           )}
         </div>
       </div>
@@ -1136,8 +1172,16 @@ export default function Contracts() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredRecords.map((record) => (
-                  <tr key={record.id} className="hover:bg-slate-50">
+                {filteredRecords.map((record) => {
+                  const metrics = deriveMeMetrics(record);
+                  return (
+                  <tr
+                    key={record.id}
+                    onClick={() => selectWorkspaceRecord(record)}
+                    className={`cursor-pointer transition-colors hover:bg-slate-50 ${
+                      selectedWorkspaceRecordId === record.id ? 'bg-emerald-50 ring-1 ring-inset ring-emerald-200' : ''
+                    }`}
+                  >
                     <td className="px-5 py-4">
                       <div className="font-semibold text-slate-900">{record.projectName || 'Untitled project'}</div>
                       <div className="text-xs text-slate-500">{record.projectCode || record.projectId || 'No ID'} - {orgById[record.organizationId]?.name || 'Organization not set'}</div>
@@ -1147,14 +1191,14 @@ export default function Contracts() {
                       <div className="text-xs text-slate-500">{record.donor || 'No donor/funder'}</div>
                     </td>
                     <td className="px-5 py-4 min-w-[180px]">
-                      <MiniBar label="Performance" value={record.performance || 0} />
+                      <MiniBar label="Performance" value={metrics.performance} />
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-700">
                       <div>{currency(record.budget)}</div>
-                      <div className="text-xs text-slate-500">Expense {currency(record.expense)}</div>
+                      <div className="text-xs text-slate-500">Expense {currency(metrics.expense)}</div>
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-700">
-                      {sumBeneficiaries(record).toLocaleString()}
+                      {metrics.beneficiariesReached.toLocaleString()}
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-700">
                       {record.branchRegion || record.targetArea || 'Not mapped'}
@@ -1164,13 +1208,25 @@ export default function Contracts() {
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-1">
-                        <button type="button" onClick={() => openRecord(record, 'view')} title="View" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Eye size={17} /></button>
-                        <button type="button" onClick={() => openRecord(record, 'edit')} title="Edit" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><Edit size={17} /></button>
-                        <button type="button" onClick={() => handleDelete(record)} title="Delete" className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={17} /></button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selectWorkspaceRecord(record);
+                            const moduleId = selectedWorkspaceRecordId === record.id ? activeWorkspaceModule.id : 'outcomes';
+                            openRecord(record, 'edit', moduleId);
+                          }}
+                          title="Edit"
+                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                        >
+                          <Edit size={17} />
+                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(record); }} title="Delete" className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={17} /></button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             {filteredRecords.length === 0 && (
@@ -1189,15 +1245,22 @@ export default function Contracts() {
         onClose={() => setShowModal(false)}
         mode={modalMode}
         title={modalMode === 'add' ? 'Create Monitoring & Evaluation Record' : modalMode === 'edit' ? 'Edit Monitoring & Evaluation Record' : 'Monitoring & Evaluation Record'}
-        onSave={handleSave}
+        onSaveAndContinue={handleSaveAndContinue}
         saving={saving}
-        activeSection={activeFormSection}
-        setActiveSection={setActiveFormSection}
+        stepIndex={formStepIndex}
+        onBack={handleFormBack}
+        onNext={handleFormNext}
       >
         <NGOFormGrid>
-          <div id="me-section-project" className="scroll-mt-6 md:col-span-2 border-b border-slate-200 pb-3">
+          {activeFormStep.id === 'project' && (
+            <>
+          <div className="md:col-span-2 border-b border-slate-200 pb-3">
             <h3 className="text-lg font-bold text-slate-900">Project Information</h3>
-            <p className="text-sm text-slate-500">Project ID, name, program, manager, timeline, budget, donor, target area, and branch region.</p>
+            <p className="text-sm text-slate-500">
+              {formData.projectId
+                ? 'Review project details loaded from the linked project.'
+                : 'Select an organization and linked project to continue.'}
+            </p>
           </div>
           <NGOFormField label="Organization" required>
             <select disabled={isView} value={formData.organizationId} onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })} className={NGO_INPUT_CLASS}>
@@ -1205,20 +1268,35 @@ export default function Contracts() {
               {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
             </select>
           </NGOFormField>
-          <NGOFormField label="Linked Project">
+          <NGOFormField label="Linked Project" required>
             <select disabled={isView} value={formData.projectId} onChange={(e) => handleProjectChange(e.target.value)} className={NGO_INPUT_CLASS}>
               <option value="">Select project</option>
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              {projects.map((project) => {
+                const taken = getExistingRecordForProject(
+                  project.id,
+                  modalMode === 'edit' ? selectedRecord?.id : undefined
+                );
+                return (
+                  <option key={project.id} value={project.id} disabled={Boolean(taken)}>
+                    {project.name}{taken ? ' (M&E record exists)' : ''}
+                  </option>
+                );
+              })}
             </select>
           </NGOFormField>
+          {!formData.projectId && !isView && (
+            <p className="md:col-span-2 text-sm text-slate-500 text-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
+              Choose a linked project to show project details.
+            </p>
+          )}
+          {formData.projectId && (
+            <>
           {[
             ['Project ID', 'projectCode'],
             ['Project Name', 'projectName'],
-            ['Program', 'program'],
+            ['Program Area', 'program'],
             ['Project Manager', 'projectManager'],
-            ['Donor / Funder', 'donor'],
-            ['Target Area', 'targetArea'],
-            ['Branch / Region', 'branchRegion']
+            ['Donor / Funder', 'donor']
           ].map(([label, key]) => (
             <NGOFormField key={key} label={label} required={key === 'projectName'}>
               <input disabled={isView} value={formData[key]} onChange={(e) => setFormData({ ...formData, [key]: e.target.value })} className={NGO_INPUT_CLASS} />
@@ -1232,8 +1310,14 @@ export default function Contracts() {
             </select>
           </NGOFormField>
           <NGOFormField label="Budget"><input disabled={isView} type="number" value={formData.budget} onChange={(e) => setFormData({ ...formData, budget: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
+            </>
+          )}
+            </>
+          )}
 
-          <div id="me-section-outcomes" className="scroll-mt-6 md:col-span-2 border-b border-slate-200 pb-3 pt-2">
+          {activeFormStep.id === 'outcomes' && (
+            <>
+          <div className="md:col-span-2 border-b border-slate-200 pb-3">
             <h3 className="text-lg font-bold text-slate-900">Objectives & Outcomes</h3>
             <p className="text-sm text-slate-500">Define the project goal, objectives, outputs, outcomes, success criteria, assumptions, and risks.</p>
           </div>
@@ -1250,122 +1334,210 @@ export default function Contracts() {
               <textarea disabled={isView} rows={3} value={formData[key]} onChange={(e) => setFormData({ ...formData, [key]: e.target.value })} className={NGO_INPUT_CLASS} />
             </NGOFormField>
           ))}
+            </>
+          )}
 
-          <ArrayEditor id="me-section-indicators" title="Indicators Management" items={formData.indicators} onChange={(items) => setFormData({ ...formData, indicators: items })} template={blankIndicator}>
+          {activeFormStep.id === 'indicators' && (
+          <ArrayEditor title="Indicators Management" items={formData.indicators} onChange={(items) => setFormData({ ...formData, indicators: items })} template={blankIndicator}>
             {(item, _index, update) => (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <input disabled={isView} placeholder="Indicator ID" value={item.indicatorId} onChange={(e) => update({ indicatorId: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Indicator Name" value={item.name} onChange={(e) => update({ name: e.target.value })} className={NGO_INPUT_CLASS} />
-                <select disabled={isView} value={item.type} onChange={(e) => update({ type: e.target.value })} className={NGO_INPUT_CLASS}>{INDICATOR_TYPES.map((x) => <option key={x}>{x}</option>)}</select>
-                <select disabled={isView} value={item.unit} onChange={(e) => update({ unit: e.target.value })} className={NGO_INPUT_CLASS}>{UNIT_OPTIONS.map((x) => <option key={x}>{x}</option>)}</select>
-                <input disabled={isView} placeholder="Description" value={item.description} onChange={(e) => update({ description: e.target.value })} className={`${NGO_INPUT_CLASS} md:col-span-4`} />
-                <input disabled={isView} type="number" placeholder="Baseline" value={item.baseline} onChange={(e) => update({ baseline: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} type="number" placeholder="Target" value={item.target} onChange={(e) => update({ target: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} type="number" placeholder="Current" value={item.current} onChange={(e) => update({ current: e.target.value })} className={NGO_INPUT_CLASS} />
-                <select disabled={isView} value={item.frequency} onChange={(e) => update({ frequency: e.target.value })} className={NGO_INPUT_CLASS}>{FREQUENCY_OPTIONS.map((x) => <option key={x}>{x}</option>)}</select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <NGOFormField label="Indicator Name">
+                  <input disabled={isView} value={item.name || ''} onChange={(e) => update({ name: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Indicator Type">
+                  <select disabled={isView} value={item.type || ''} onChange={(e) => update({ type: e.target.value })} className={NGO_INPUT_CLASS}>
+                    <option value="">Select type</option>
+                    {INDICATOR_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                </NGOFormField>
+                <NGOFormField label="Unit of Measure">
+                  <select disabled={isView} value={item.unit || ''} onChange={(e) => update({ unit: e.target.value })} className={NGO_INPUT_CLASS}>
+                    <option value="">Select unit</option>
+                    {UNIT_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                </NGOFormField>
+                <NGOFormField label="Data Collection Frequency">
+                  <select disabled={isView} value={item.frequency || ''} onChange={(e) => update({ frequency: e.target.value })} className={NGO_INPUT_CLASS}>
+                    <option value="">Select frequency</option>
+                    {FREQUENCY_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                </NGOFormField>
+                <NGOFormField label="Description" colSpan={2}>
+                  <textarea disabled={isView} rows={2} value={item.description || ''} onChange={(e) => update({ description: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Baseline Value">
+                  <input disabled={isView} type="number" value={item.baseline ?? ''} onChange={(e) => update({ baseline: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Target Value">
+                  <input disabled={isView} type="number" value={item.target ?? ''} onChange={(e) => update({ target: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Current Value">
+                  <input disabled={isView} type="number" value={item.current ?? ''} onChange={(e) => update({ current: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
               </div>
             )}
           </ArrayEditor>
+          )}
 
-          <ArrayEditor id="me-section-activities" title="Activity Tracking" items={formData.activities} onChange={(items) => setFormData({ ...formData, activities: items })} template={blankActivity}>
-            {(item, _index, update) => (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <input disabled={isView} placeholder="Activity Name" value={item.name} onChange={(e) => update({ name: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Assigned Staff" value={item.assignedStaff} onChange={(e) => update({ assignedStaff: e.target.value })} className={NGO_INPUT_CLASS} />
-                <select disabled={isView} value={item.status} onChange={(e) => update({ status: e.target.value })} className={NGO_INPUT_CLASS}>{['Pending', 'Ongoing', 'Completed'].map((x) => <option key={x}>{x}</option>)}</select>
-                <input disabled={isView} type="number" placeholder="Progress %" value={item.progress} onChange={(e) => update({ progress: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Description" value={item.description} onChange={(e) => update({ description: e.target.value })} className={`${NGO_INPUT_CLASS} md:col-span-2`} />
-                <input disabled={isView} type="date" value={item.startDate} onChange={(e) => update({ startDate: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} type="date" value={item.endDate} onChange={(e) => update({ endDate: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} type="number" placeholder="Budget Used" value={item.budgetUsed} onChange={(e) => update({ budgetUsed: e.target.value })} className={NGO_INPUT_CLASS} />
-              </div>
-            )}
-          </ArrayEditor>
-
-          <ArrayEditor id="me-section-beneficiaries" title="Beneficiary Tracking" items={formData.beneficiaries} onChange={(items) => setFormData({ ...formData, beneficiaries: items })} template={blankBeneficiary}>
-            {(item, _index, update) => (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                {['beneficiaryId', 'name', 'category', 'location', 'servicesReceived', 'gender', 'ageGroup'].map((key) => (
-                  <input key={key} disabled={isView} placeholder={key} value={item[key]} onChange={(e) => update({ [key]: e.target.value })} className={NGO_INPUT_CLASS} />
-                ))}
-                <input disabled={isView} type="number" placeholder="Number Reached" value={item.numberReached} onChange={(e) => update({ numberReached: e.target.value })} className={NGO_INPUT_CLASS} />
-              </div>
-            )}
-          </ArrayEditor>
-
-          <NGOFormField label="Data Collection" colSpan={2}>
-            <div id="me-section-data" className="scroll-mt-6 grid grid-cols-1 md:grid-cols-3 gap-2">
-              {['Survey Forms', 'Questionnaires', 'Field Reports', 'Mobile Data Collection', 'GPS Location', 'Photos', 'Video Uploads', 'Supporting Documents'].map((item) => (
-                <label key={item} className="flex items-center gap-2 text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2">
-                  <input
-                    type="checkbox"
-                    disabled={isView}
-                    checked={formData.dataCollection.includes(item)}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      dataCollection: e.target.checked
-                        ? [...formData.dataCollection, item]
-                        : formData.dataCollection.filter((value) => value !== item)
+          {activeFormStep.id === 'activities' && (
+          <ArrayEditor title="Activity Tracking" items={formData.activities} onChange={(items) => setFormData({ ...formData, activities: items })} template={blankActivity}>
+            {(item, _index, update) => {
+              const assignedValue = item.assignedStaff || '';
+              const staffNames = activeStaff.map((member) => staffDisplayName(member)).filter(Boolean);
+              const hasLegacyStaff = assignedValue && !staffNames.includes(assignedValue);
+              return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <NGOFormField label="Activity Name">
+                  <input disabled={isView} value={item.name || ''} onChange={(e) => update({ name: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Assigned Staff" hint={!staffOrgId ? 'Select an organization on Project Information to load staff.' : undefined}>
+                  <select
+                    disabled={isView || !staffOrgId}
+                    value={assignedValue}
+                    onChange={(e) => update({ assignedStaff: e.target.value })}
+                    className={NGO_INPUT_CLASS}
+                  >
+                    <option value="">{staffOrgId ? 'Select staff member' : 'Select organization first'}</option>
+                    {hasLegacyStaff ? <option value={assignedValue}>{assignedValue}</option> : null}
+                    {activeStaff.map((member) => {
+                      const name = staffDisplayName(member);
+                      if (!name) return null;
+                      return (
+                        <option key={member.id} value={name}>
+                          {staffOptionLabel(member)}
+                        </option>
+                      );
                     })}
-                  />
-                  {item}
-                </label>
-              ))}
-            </div>
-          </NGOFormField>
+                  </select>
+                </NGOFormField>
+                <NGOFormField label="Status">
+                  <select disabled={isView} value={item.status || ''} onChange={(e) => update({ status: e.target.value })} className={NGO_INPUT_CLASS}>
+                    <option value="">Select status</option>
+                    {ACTIVITY_STATUS_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                </NGOFormField>
+                <NGOFormField label="Progress %">
+                  <input disabled={isView} type="number" min={0} max={100} value={item.progress ?? ''} onChange={(e) => update({ progress: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Description" colSpan={2}>
+                  <textarea disabled={isView} rows={2} value={item.description || ''} onChange={(e) => update({ description: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Start Date">
+                  <input disabled={isView} type="date" value={item.startDate || ''} onChange={(e) => update({ startDate: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="End Date">
+                  <input disabled={isView} type="date" value={item.endDate || ''} onChange={(e) => update({ endDate: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Budget Used">
+                  <input disabled={isView} type="number" value={item.budgetUsed ?? ''} onChange={(e) => update({ budgetUsed: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+              </div>
+              );
+            }}
+          </ArrayEditor>
+          )}
 
-          <ArrayEditor id="me-section-visits" title="Field Visits" items={formData.fieldVisits} onChange={(items) => setFormData({ ...formData, fieldVisits: items })} template={blankFieldVisit}>
+          {activeFormStep.id === 'beneficiaries' && (
+          <ArrayEditor title="Beneficiary Tracking" items={formData.beneficiaries} onChange={(items) => setFormData({ ...formData, beneficiaries: items })} template={blankBeneficiary}>
+            {(item, _index, update) => {
+              const genderValue = item.gender || '';
+              const hasLegacyGender = genderValue && !GENDER_OPTIONS.includes(genderValue);
+              return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <NGOFormField label="Beneficiary Name">
+                  <input disabled={isView} value={item.name || ''} onChange={(e) => update({ name: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Category">
+                  <input disabled={isView} value={item.category || ''} onChange={(e) => update({ category: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Location">
+                  <input disabled={isView} value={item.location || ''} onChange={(e) => update({ location: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Gender">
+                  <select disabled={isView} value={genderValue} onChange={(e) => update({ gender: e.target.value })} className={NGO_INPUT_CLASS}>
+                    <option value="">Select gender</option>
+                    {hasLegacyGender ? <option value={genderValue}>{genderValue}</option> : null}
+                    {GENDER_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </NGOFormField>
+                <NGOFormField label="Age Group">
+                  <input disabled={isView} value={item.ageGroup || ''} onChange={(e) => update({ ageGroup: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Number Reached">
+                  <input disabled={isView} type="number" min={0} value={item.numberReached ?? ''} onChange={(e) => update({ numberReached: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+              
+              </div>
+              );
+            }}
+          </ArrayEditor>
+          )}
+
+          {activeFormStep.id === 'visits' && (
+          <ArrayEditor title="Field Visits" items={formData.fieldVisits} onChange={(items) => setFormData({ ...formData, fieldVisits: items })} template={blankFieldVisit}>
             {(item, _index, update) => (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <input disabled={isView} type="date" value={item.visitDate} onChange={(e) => update({ visitDate: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Field Officer" value={item.fieldOfficer} onChange={(e) => update({ fieldOfficer: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Location" value={item.location} onChange={(e) => update({ location: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Purpose" value={item.purpose} onChange={(e) => update({ purpose: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Findings" value={item.findings} onChange={(e) => update({ findings: e.target.value })} className={`${NGO_INPUT_CLASS} md:col-span-2`} />
-                <input disabled={isView} placeholder="Recommendations" value={item.recommendations} onChange={(e) => update({ recommendations: e.target.value })} className={`${NGO_INPUT_CLASS} md:col-span-2`} />
-                <input disabled={isView} placeholder="Photos" value={item.photos} onChange={(e) => update({ photos: e.target.value })} className={`${NGO_INPUT_CLASS} md:col-span-2`} />
-                <input disabled={isView} placeholder="Signatures" value={item.signatures} onChange={(e) => update({ signatures: e.target.value })} className={`${NGO_INPUT_CLASS} md:col-span-2`} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <NGOFormField label="Visit Date">
+                  <input disabled={isView} type="date" value={item.visitDate || ''} onChange={(e) => update({ visitDate: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Field Officer">
+                  <input disabled={isView} value={item.fieldOfficer || ''} onChange={(e) => update({ fieldOfficer: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Location">
+                  <input disabled={isView} value={item.location || ''} onChange={(e) => update({ location: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Purpose">
+                  <input disabled={isView} value={item.purpose || ''} onChange={(e) => update({ purpose: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Findings" colSpan={2}>
+                  <textarea disabled={isView} rows={2} value={item.findings || ''} onChange={(e) => update({ findings: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Recommendations" colSpan={2}>
+                  <textarea disabled={isView} rows={2} value={item.recommendations || ''} onChange={(e) => update({ recommendations: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Photos" colSpan={2}>
+                  <input disabled={isView} value={item.photos || ''} onChange={(e) => update({ photos: e.target.value })} className={NGO_INPUT_CLASS} placeholder="URLs or file references" />
+                </NGOFormField>
+                <NGOFormField label="Signatures" colSpan={2}>
+                  <input disabled={isView} value={item.signatures || ''} onChange={(e) => update({ signatures: e.target.value })} className={NGO_INPUT_CLASS} placeholder="Officer or beneficiary signatures" />
+                </NGOFormField>
               </div>
             )}
           </ArrayEditor>
+          )}
 
-          <ArrayEditor id="me-section-risks" title="Risk & Issue Tracking" items={formData.riskIssues} onChange={(items) => setFormData({ ...formData, riskIssues: items })} template={blankRisk}>
+          {activeFormStep.id === 'risks' && (
+            <>
+          <ArrayEditor title="Risk & Issue Tracking" items={formData.riskIssues} onChange={(items) => setFormData({ ...formData, riskIssues: items })} template={blankRisk}>
             {(item, _index, update) => (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <input disabled={isView} placeholder="Risk ID" value={item.riskId} onChange={(e) => update({ riskId: e.target.value })} className={NGO_INPUT_CLASS} />
-                <select disabled={isView} value={item.severity} onChange={(e) => update({ severity: e.target.value })} className={NGO_INPUT_CLASS}>{SEVERITY_OPTIONS.map((x) => <option key={x}>{x}</option>)}</select>
-                <input disabled={isView} placeholder="Status" value={item.status} onChange={(e) => update({ status: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Risk Description" value={item.description} onChange={(e) => update({ description: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Mitigation Plan" value={item.mitigationPlan} onChange={(e) => update({ mitigationPlan: e.target.value })} className={NGO_INPUT_CLASS} />
-                <input disabled={isView} placeholder="Responsible Person" value={item.responsiblePerson} onChange={(e) => update({ responsiblePerson: e.target.value })} className={NGO_INPUT_CLASS} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                <NGOFormField label="Severity">
+                  <select disabled={isView} value={item.severity || ''} onChange={(e) => update({ severity: e.target.value })} className={NGO_INPUT_CLASS}>
+                    <option value="">Select severity</option>
+                    {SEVERITY_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                </NGOFormField>
+                <NGOFormField label="Status">
+                  <input disabled={isView} value={item.status || ''} onChange={(e) => update({ status: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Responsible Person">
+                  <input disabled={isView} value={item.responsiblePerson || ''} onChange={(e) => update({ responsiblePerson: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Risk Description" colSpan={2}>
+                  <textarea disabled={isView} rows={2} value={item.description || ''} onChange={(e) => update({ description: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
+                <NGOFormField label="Mitigation Plan" colSpan={2}>
+                  <textarea disabled={isView} rows={2} value={item.mitigationPlan || ''} onChange={(e) => update({ mitigationPlan: e.target.value })} className={NGO_INPUT_CLASS} />
+                </NGOFormField>
               </div>
             )}
           </ArrayEditor>
-
-          <div id="me-section-kpi" className="scroll-mt-6 md:col-span-2 border-b border-slate-200 pb-3 pt-2">
-            <h3 className="text-lg font-bold text-slate-900">KPI Dashboard</h3>
-            <p className="text-sm text-slate-500">Budget utilization, project performance, completion, target vs actual, and beneficiary metrics.</p>
-          </div>
-          <NGOFormField label="KPI Dashboard Inputs"><input disabled={isView} type="number" value={formData.expense} onChange={(e) => setFormData({ ...formData, expense: e.target.value })} className={NGO_INPUT_CLASS} placeholder="Budget expense" /></NGOFormField>
-          <NGOFormField label="Performance %"><input disabled={isView} type="number" value={formData.performance} onChange={(e) => setFormData({ ...formData, performance: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-          <NGOFormField label="Project Completion %"><input disabled={isView} type="number" value={formData.completion} onChange={(e) => setFormData({ ...formData, completion: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-          <NGOFormField label="Reports & Exports">
-            <div id="me-section-reports" className="scroll-mt-6 text-sm text-slate-700 border border-slate-200 rounded-lg p-3">
-              {REPORT_TYPES.join(', ')} - Export: {EXPORT_TYPES.join(', ')}
-            </div>
-          </NGOFormField>
-          <NGOFormField label="GIS / Map Tracking" colSpan={2}>
-            <div id="me-section-gis" className="scroll-mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-              {['region', 'district', 'sector', 'village', 'coordinates', 'activityMap'].map((key) => (
-                <input key={key} disabled={isView} placeholder={key} value={formData.gisLocations[0]?.[key] || ''} onChange={(e) => setFormData({ ...formData, gisLocations: [{ ...formData.gisLocations[0], [key]: e.target.value }] })} className={NGO_INPUT_CLASS} />
-              ))}
-            </div>
-          </NGOFormField>
-          <div id="me-section-analytics" className="scroll-mt-6 md:col-span-2 rounded-lg border border-emerald-100 bg-emerald-50 p-4">
-            <h3 className="text-lg font-bold text-emerald-950">Analytics Dashboard</h3>
-            <p className="mt-1 text-sm text-emerald-800">Saved values feed the KPI cards, target vs actual bars, budget vs expense, activity completion, and geographic impact widgets on the main page.</p>
-          </div>
-          <NGOFormField label="Notes" colSpan={2}><textarea disabled={isView} rows={3} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
+          <NGOFormField label="Notes" colSpan={2}><textarea disabled={isView} rows={3} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className={NGO_INPUT_CLASS} placeholder="Additional M&E notes or observations" /></NGOFormField>
+            </>
+          )}
         </NGOFormGrid>
       </DrawerShell>
     </div>

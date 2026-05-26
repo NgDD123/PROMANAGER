@@ -111,9 +111,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
             {organizationName ? `${organizationName} Dashboard` : 'Dashboard'}
           </h1>
           <p className="text-gray-600 mt-1">Live overview for your organization</p>
@@ -169,7 +169,7 @@ export default function Dashboard() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <p className="text-sm text-gray-600 mb-1">{stat.title}</p>
-                      <h3 className="text-2xl font-bold text-gray-800">{stat.value}</h3>
+                      <h3 className="text-xl sm:text-2xl font-bold text-gray-800">{stat.value}</h3>
                       <div className="flex items-center mt-2 gap-1 flex-wrap">
                         {stat.changeType === 'increase' && (
                           <TrendingUp size={16} className="text-green-600" />

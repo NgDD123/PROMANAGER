@@ -4,12 +4,12 @@ import { ClipboardCheck, Plus } from 'lucide-react';
 export default function Audit() {
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Audit & Compliance</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Audit & Compliance</h1>
           <p className="text-gray-600 mt-1">Manage audits, compliance, and regulatory requirements</p>
         </div>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 whitespace-nowrap shrink-0">
           <Plus size={20} />
           <span>Add Audit</span>
         </button>

@@ -35,7 +35,7 @@ export default function AuditPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">Audit Workspace</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Audit Workspace</h1>
           <p className="text-sm text-gray-600 mt-1">Chart of accounts, journal entries, trial balance, and audit controls</p>
         </div>
       </header>
@@ -169,15 +169,15 @@ export default function AuditPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-700 font-medium">Total Debits</p>
-              <p className="text-2xl font-bold text-blue-900 mt-1">${totalDebits.toLocaleString()}</p>
+              <p className="text-xl sm:text-2xl font-bold text-blue-900 mt-1">${totalDebits.toLocaleString()}</p>
             </div>
             <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
               <p className="text-sm text-purple-700 font-medium">Total Credits</p>
-              <p className="text-2xl font-bold text-purple-900 mt-1">${totalCredits.toLocaleString()}</p>
+              <p className="text-xl sm:text-2xl font-bold text-purple-900 mt-1">${totalCredits.toLocaleString()}</p>
             </div>
             <div className={`p-4 border rounded-lg ${isBalanced ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
               <p className={`text-sm font-medium ${isBalanced ? 'text-green-700' : 'text-red-700'}`}>Balance Status</p>
-              <p className={`text-2xl font-bold mt-1 ${isBalanced ? 'text-green-900' : 'text-red-900'}`}>
+              <p className={`text-xl sm:text-2xl font-bold mt-1 ${isBalanced ? 'text-green-900' : 'text-red-900'}`}>
                 {isBalanced ? 'Balanced' : 'Unbalanced'}
               </p>
             </div>
@@ -217,7 +217,7 @@ function StatusCard({ icon: Icon, label, value, status }) {
         </div>
       </div>
       <p className="text-sm text-gray-600">{label}</p>
-      <p className="text-xl font-bold text-gray-900 mt-1">{value}</p>
+      <p className="text-base sm:text-xl font-bold text-gray-900 mt-1">{value}</p>
     </div>
   );
 }

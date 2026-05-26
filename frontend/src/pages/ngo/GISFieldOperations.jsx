@@ -68,7 +68,7 @@ export default function GISFieldOperations({
 
       <div className="rounded-lg border border-gray-200 bg-white p-6 mb-6 shadow-sm">
         <div className="flex items-center justify-between mb-5">
-          <h4 className="text-xl font-bold flex items-center gap-2">
+          <h4 className="text-base sm:text-xl font-bold flex items-center gap-2">
             <MapPinned className="w-6 h-6 text-emerald-700" />
             GIS Project Locations
           </h4>
@@ -150,7 +150,7 @@ export default function GISFieldOperations({
 
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between mb-5">
-          <h4 className="text-xl font-bold flex items-center gap-2">
+          <h4 className="text-base sm:text-xl font-bold flex items-center gap-2">
             <Route className="w-6 h-6 text-blue-700" />
             Field Visit Log
           </h4>
@@ -228,7 +228,7 @@ function Metric({ icon: Icon, label, value }) {
   return (
     <div className="border-2 border-gray-200 rounded-lg p-4 bg-white hover:border-emerald-300 transition-colors">
       <Icon className="w-6 h-6 text-emerald-700 mb-3" />
-      <p className="text-3xl font-bold text-gray-900">{value}</p>
+      <p className="text-xl sm:text-3xl font-bold text-gray-900">{value}</p>
       <p className="text-xs text-gray-600 mt-2 font-semibold">{label}</p>
     </div>
   );

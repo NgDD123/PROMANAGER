@@ -125,23 +125,26 @@ export default function Branches() {
 
   const modalCopy = ngoModalCopy('Branch', modalMode);
 
-  const filteredBranches = branches.filter(branch =>
-    branch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    branch.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    branch.city.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredBranches = branches.filter((branch) => {
+    const q = searchTerm.toLowerCase();
+    return (
+      (branch.name || '').toLowerCase().includes(q) ||
+      (branch.code || '').toLowerCase().includes(q) ||
+      (branch.city || '').toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Branches</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Branches</h1>
           <p className="text-gray-600 mt-1">Manage all organizational branches and offices</p>
         </div>
         <button
           onClick={handleAdd}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 whitespace-nowrap shrink-0"
         >
           <Plus size={20} />
           <span>Add Branch</span>
@@ -150,8 +153,8 @@ export default function Branches() {
 
       {/* Search and Filters */}
       <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <div className="flex items-center space-x-4">
-          <div className="flex-1 relative">
+        <div className="flex items-start space-x-4 md:flex-row flex-col gap-2">
+          <div className="flex-1 relative w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
             <input
               type="text"
@@ -164,7 +167,7 @@ export default function Branches() {
           <select 
             value={filterOrg}
             onChange={(e) => setFilterOrg(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
           >
             <option value="">All Organizations</option>
             {organizations.map(org => (
@@ -174,7 +177,7 @@ export default function Branches() {
           <select 
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
           >
             <option value="">All Types</option>
             <option value="Headquarters">Headquarters</option>
@@ -216,7 +219,7 @@ export default function Branches() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-800">{branch.name}</h3>
-                    <p className="text-sm text-gray-500">{branch.code}</p>
+                    {branch.code ? <p className="text-sm text-gray-500">{branch.code}</p> : null}
                   </div>
                 </div>
               </div>
@@ -303,147 +306,176 @@ export default function Branches() {
         saveLabel="Save Branch"
         maxWidth="4xl"
       >
-        <NGOFormGrid>
-          <NGOFormField label="Organization" required colSpan={2}>
-            <select
-              value={formData.organizationId}
-              onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            >
-              <option value="">Select Organization</option>
-              {organizations.map(org => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
-            </select>
-          </NGOFormField>
+        <div className="space-y-8">
+          <section>
+            <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+              Branch details
+            </h3>
+            <NGOFormGrid>
+              <NGOFormField label="Organization" required colSpan={2}>
+                <select
+                  value={formData.organizationId}
+                  onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                >
+                  <option value="">Select Organization</option>
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name}
+                    </option>
+                  ))}
+                </select>
+              </NGOFormField>
 
-          <NGOFormField label="Branch Name" required>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Enter branch name"
-            />
-          </NGOFormField>
+              <NGOFormField label="Branch Name" required>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                  placeholder="Enter branch name"
+                />
+              </NGOFormField>
 
-          <NGOFormField label="Branch Code" required>
-            <input
-              type="text"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Enter branch code"
-            />
-          </NGOFormField>
+              {modalMode !== 'add' ? (
+                <NGOFormField label="Branch Code">
+                  <input
+                    type="text"
+                    value={formData.code || ''}
+                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    disabled={modalMode === 'view'}
+                    className={NGO_INPUT_CLASS}
+                    placeholder="Enter branch code"
+                  />
+                </NGOFormField>
+              ) : null}
 
-          <NGOFormField label="Branch Type" required>
-            <select
-              value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            >
-              <option>Headquarters</option>
-              <option>Regional Office</option>
-              <option>Field Office</option>
-              <option>Sub-Office</option>
-            </select>
-          </NGOFormField>
+              <NGOFormField label="Branch Type" required>
+                <select
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                >
+                  <option>Headquarters</option>
+                  <option>Regional Office</option>
+                  <option>Field Office</option>
+                  <option>Sub-Office</option>
+                </select>
+              </NGOFormField>
 
-          <NGOFormField label="Established Date" hint="Date this branch location opened">
-            <input
-              type="date"
-              value={formData.established || ''}
-              max={todayDateInputValue()}
-              onChange={(e) => setFormData({ ...formData, established: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            />
-          </NGOFormField>
+              <NGOFormField label="Status" required>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                >
+                  <option>Active</option>
+                  <option>Inactive</option>
+                  <option>Closed</option>
+                </select>
+              </NGOFormField>
 
-          <NGOFormField label="Country" required>
-            <input
-              type="text"
-              value={formData.country}
-              onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Enter country"
-            />
-          </NGOFormField>
+              <NGOFormField
+                label="Established Date"
+                hint="Date this branch location opened"
+                colSpan={modalMode === 'add' ? 1 : 2}
+              >
+                <input
+                  type="date"
+                  value={formData.established || ''}
+                  max={todayDateInputValue()}
+                  onChange={(e) => setFormData({ ...formData, established: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                />
+              </NGOFormField>
+            </NGOFormGrid>
+          </section>
 
-          <NGOFormField label="City" required>
-            <input
-              type="text"
-              value={formData.city}
-              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Enter city"
-            />
-          </NGOFormField>
+          <section>
+            <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+              Location
+            </h3>
+            <NGOFormGrid>
+              <NGOFormField label="Country" required>
+                <input
+                  type="text"
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                  placeholder="Enter country"
+                />
+              </NGOFormField>
 
-          <NGOFormField label="Address" required colSpan={2}>
-            <input
-              type="text"
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Enter full address"
-            />
-          </NGOFormField>
+              <NGOFormField label="City" required>
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                  placeholder="Enter city"
+                />
+              </NGOFormField>
 
-          <NGOFormField label="Branch Manager" required>
-            <input
-              type="text"
-              value={formData.manager}
-              onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Enter manager name"
-            />
-          </NGOFormField>
+              <NGOFormField label="Address" required colSpan={2}>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  disabled={modalMode === 'view'}
+                  className={NGO_INPUT_CLASS}
+                  placeholder="Enter full address"
+                />
+              </NGOFormField>
+            </NGOFormGrid>
+          </section>
 
-          <NGOFormField label="Phone" required>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Enter phone number"
-            />
-          </NGOFormField>
-
-          <NGOFormField label="Email" required>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Enter email"
-            />
-          </NGOFormField>
-
-          <NGOFormField label="Status" required>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            >
-              <option>Active</option>
-              <option>Inactive</option>
-              <option>Closed</option>
-            </select>
-          </NGOFormField>
-        </NGOFormGrid>
+          {modalMode !== 'add' ? (
+            <section>
+              <h3 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">
+                Contact (optional)
+              </h3>
+              <NGOFormGrid>
+                <NGOFormField label="Branch Manager">
+                  <input
+                    type="text"
+                    value={formData.manager || ''}
+                    onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
+                    disabled={modalMode === 'view'}
+                    className={NGO_INPUT_CLASS}
+                    placeholder="Enter manager name"
+                  />
+                </NGOFormField>
+                <NGOFormField label="Email">
+                  <input
+                    type="email"
+                    value={formData.email || ''}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    disabled={modalMode === 'view'}
+                    className={NGO_INPUT_CLASS}
+                    placeholder="Enter email"
+                  />
+                </NGOFormField>
+                <NGOFormField label="Phone" colSpan={2}>
+                  <input
+                    type="tel"
+                    value={formData.phone || ''}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    disabled={modalMode === 'view'}
+                    className={NGO_INPUT_CLASS}
+                    placeholder="Enter phone number"
+                  />
+                </NGOFormField>
+              </NGOFormGrid>
+            </section>
+          ) : null}
+        </div>
       </NGOModal>
     </div>
   );

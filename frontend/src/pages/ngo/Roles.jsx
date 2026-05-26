@@ -255,9 +255,9 @@ export default function Roles() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Roles</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Roles</h1>
           <p className="text-gray-600 mt-1">
             Create branch sub-roles and choose which sidebar modules assigned users can access
           </p>
