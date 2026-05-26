@@ -2,6 +2,10 @@ import jwt from 'jsonwebtoken';
 import { NGOUser } from '../models/ngo/user.model.js';
 import { Role } from '../models/ngo/role.model.js';
 import { isNgoAdminUser, ngoUserHasScope } from '../config/ngoNavigationScopes.config.js';
+import {
+  canManageChurchUsers,
+  resolveChurchNavigationScopes,
+} from '../config/churchNavigationScopes.config.js';
 
 export function ngoAuth(req, res, next) {
   try {
@@ -79,13 +83,17 @@ export async function attachNgoUserContext(req, res, next) {
       }
     }
 
-    req.ngoUser = {
+    const ngoUser = {
       ...user,
       isSubRole,
       navigationScopes,
     };
-    req.isNgoAdmin = isNgoAdminUser(req.ngoUser);
+
+    req.ngoUser = ngoUser;
+    req.isNgoAdmin = isNgoAdminUser(ngoUser);
     req.navigationScopes = navigationScopes;
+    req.churchNavigationScopes = resolveChurchNavigationScopes(ngoUser, navigationScopes);
+    req.canManageChurchUsers = canManageChurchUsers(ngoUser);
     next();
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

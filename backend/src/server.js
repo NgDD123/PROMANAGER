@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { initFirebase } from '../utils/firebase.js';
 import { getMailConfigStatus, isMailConfigured } from './utils/mailer.js';
+import { getCloudinaryConfigStatus, isCloudinaryConfigured } from './utils/cloudinary.js';
 import { buildCorsOptions } from './config/cors.config.js';
 
 const NODE_ENV_RAW = process.env.NODE_ENV || 'development';
@@ -32,6 +33,13 @@ if (isMailConfigured()) {
 } else {
   console.warn('📧 Mail: NOT configured —', mailStatus.reason);
   console.warn('📧 Put MAILTRAP_TOKEN and MAILTRAP_FROM_EMAIL in backend/.env, then restart.');
+}
+
+const cloudinaryStatus = getCloudinaryConfigStatus();
+if (isCloudinaryConfigured()) {
+  console.log(`☁️  Cloudinary: configured (${cloudinaryStatus.cloudName})`);
+} else {
+  console.warn('☁️  Cloudinary: NOT configured —', cloudinaryStatus.reason);
 }
 
 const app = express();
@@ -136,7 +144,13 @@ import ngoRoleRoutes from './routes/ngo/role.routes.js';
 import ngoFinanceRoutes from './routes/ngo/finance.routes.js';
 import ngoAuditRoutes from './routes/ngo/audit.routes.js';
 import ngoBeneficialOwnerRoutes from './routes/ngo/beneficialOwner.routes.js';
+import ngoStorageRoutes from './routes/ngo/storage.routes.js';
+import ngoChurchRoutes from './routes/ngo/church.routes.js';
+import ngoGisRoutes from './routes/ngo/gis.routes.js';
+import ngoServiceControlRoutes from './routes/ngo/serviceControl.routes.js';
+import ngoSettingsRoutes from './routes/ngo/settings.routes.js';
 import ngoUserRoutes from './routes/ngo/user.routes.js';
+import ngoAccountRoutes from './routes/ngo/account.routes.js';
 import ngoDashboardRoutes from './routes/ngo/dashboard.routes.js';
 
 // HR Routes
@@ -271,21 +285,27 @@ app.use('/api/v1/super-admin/platform-users', superAdminPlatformUserRoutes);
 app.use('/api/v1/super-admin/service-registrations', superAdminServiceRegistrationRoutes);
 app.use('/api/v1/ngo/dashboard', requireFirebase, ngoDashboardRoutes);
 app.use('/api/v1/ngo/users', requireFirebase, ngoUserRoutes);
-app.use('/api/v1/ngo', requireFirebase, ngoOperationsRoutes);
+app.use('/api/v1/ngo/account', requireFirebase, ngoAccountRoutes);
 app.use('/api/v1/ngo/projects', requireFirebase, ngoProjectRoutes);
 app.use('/api/v1/ngo/tenders', requireFirebase, ngoTenderRoutes);
 app.use('/api/v1/ngo/contracts', requireFirebase, ngoContractRoutes);
+app.use('/api/v1/ngo/storages', requireFirebase, ngoStorageRoutes);
+app.use('/api/v1/ngo/church', requireFirebase, ngoChurchRoutes);
 app.use('/api/v1/ngo/impacts', requireFirebase, ngoImpactRoutes);
 app.use('/api/v1/ngo/evaluations', requireFirebase, ngoEvaluationRoutes);
+app.use('/api/v1/ngo/finances', requireFirebase, ngoFinanceRoutes);
+app.use('/api/v1/ngo/audits', requireFirebase, ngoAuditRoutes);
+app.use('/api/v1/ngo/beneficial-owners', requireFirebase, ngoBeneficialOwnerRoutes);
+app.use('/api/v1/ngo/service-control', requireFirebase, ngoServiceControlRoutes);
+app.use('/api/v1/ngo', requireFirebase, ngoGisRoutes);
+app.use('/api/v1/ngo', requireFirebase, ngoSettingsRoutes);
+app.use('/api/v1/ngo', requireFirebase, ngoOperationsRoutes);
 app.use('/api/v1/ngo/integration', requireFirebase, ngoIntegrationRoutes);
 app.use('/api/v1/ngo/organizations', requireFirebase, ngoOrganizationRoutes);
 app.use('/api/v1/ngo/branches', requireFirebase, ngoBranchRoutes);
 app.use('/api/v1/ngo/departments', requireFirebase, ngoDepartmentRoutes);
 app.use('/api/v1/ngo/org-charts', requireFirebase, ngoOrgChartRoutes);
 app.use('/api/v1/ngo/roles', requireFirebase, ngoRoleRoutes);
-app.use('/api/v1/ngo/finances', requireFirebase, ngoFinanceRoutes);
-app.use('/api/v1/ngo/audits', requireFirebase, ngoAuditRoutes);
-app.use('/api/v1/ngo/beneficial-owners', requireFirebase, ngoBeneficialOwnerRoutes);
 
 // Currency routes
 app.use('/api/v1/currency', currencyRoutes);

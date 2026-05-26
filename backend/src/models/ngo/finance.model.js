@@ -34,6 +34,7 @@ export class Finance {
     if (filters.type) query = query.where('type', '==', filters.type);
     if (filters.projectId) query = query.where('projectId', '==', filters.projectId);
     if (filters.status) query = query.where('status', '==', filters.status);
+    if (filters.createdBy) query = query.where('createdBy', '==', filters.createdBy);
     if (filters.startDate && filters.endDate) {
       query = query.where('date', '>=', filters.startDate)
                    .where('date', '<=', filters.endDate);

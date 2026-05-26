@@ -34,7 +34,14 @@ export class NGOUser {
       lastLoginAt: data.lastLoginAt ?? null,
       invitedBy: data.invitedBy || '',
       approvedBy: data.approvedBy || '',
-      notes: data.notes || ''
+      notes: data.notes || '',
+      isChurchStaff: data.isChurchStaff !== undefined ? Boolean(data.isChurchStaff) : undefined,
+      churchNavigationScopes: Array.isArray(data.churchNavigationScopes)
+        ? data.churchNavigationScopes
+        : undefined,
+      churchInvitedBy: data.churchInvitedBy || '',
+      churchMemberId: data.churchMemberId || '',
+      branchName: data.branchName || '',
     });
   }
 
@@ -61,6 +68,7 @@ export class NGOUser {
     if (filters.departmentId) query = query.where('departmentId', '==', filters.departmentId);
     if (filters.branchId) query = query.where('branchId', '==', filters.branchId);
     if (filters.accountStatus) query = query.where('accountStatus', '==', filters.accountStatus);
+    if (filters.isChurchStaff === true) query = query.where('isChurchStaff', '==', true);
 
     const snapshot = await query.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -108,6 +116,32 @@ export class NGOUser {
     await db().collection(COLLECTION).doc(id).update({
       permissions,
       updatedAt: new Date()
+    });
+    return this.getById(id);
+  }
+
+  static async updateProfile(id, data = {}) {
+    const payload = stripUndefined({
+      fullName: data.fullName,
+      phone: data.phone,
+      jobTitle: data.jobTitle,
+    });
+    if (!Object.keys(payload).length) {
+      const error = new Error('No profile fields to update');
+      error.statusCode = 400;
+      throw error;
+    }
+    await db().collection(COLLECTION).doc(id).update({
+      ...payload,
+      updatedAt: new Date(),
+    });
+    return this.getById(id);
+  }
+
+  static async updatePasswordHash(id, passwordHash) {
+    await db().collection(COLLECTION).doc(id).update({
+      passwordHash,
+      updatedAt: new Date(),
     });
     return this.getById(id);
   }

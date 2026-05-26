@@ -10,6 +10,7 @@ export const NAVIGATION_SCOPE_VALUES = [
   'gis',
   'finance',
   'impact',
+  'church',
   'audit',
   'beneficial-owners',
   'service-control',

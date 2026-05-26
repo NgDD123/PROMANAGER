@@ -1,4 +1,5 @@
 import { db } from '../../../utils/firebase.js';
+import { aggregateMeMetrics, deriveMeMetrics, formatUtilizationPercent } from '../../utils/meMetrics.js';
 
 const COLLECTION = 'ngo_contracts';
 
@@ -14,8 +15,9 @@ function asNumber(value) {
 
 export class Contract {
   static sanitize(data = {}) {
-    return stripUndefined({
+    const base = stripUndefined({
       organizationId: data.organizationId,
+      createdBy: data.createdBy,
       projectId: data.projectId,
       tenderId: data.tenderId || '',
       projectCode: (data.projectCode || data.projectId || '').trim(),
@@ -50,6 +52,14 @@ export class Contract {
       beneficiaryTotal: asNumber(data.beneficiaryTotal),
       notes: (data.notes || '').trim()
     });
+    const metrics = deriveMeMetrics(base);
+    return stripUndefined({
+      ...base,
+      expense: metrics.expense,
+      performance: metrics.performance,
+      completion: metrics.completion,
+      beneficiaryTotal: metrics.beneficiariesReached
+    });
   }
 
   static async create(data) {
@@ -67,6 +77,7 @@ export class Contract {
     if (organizationId) query = query.where('organizationId', '==', organizationId);
     if (projectId) query = query.where('projectId', '==', projectId);
     if (filters.status) query = query.where('status', '==', filters.status);
+    if (filters.createdBy) query = query.where('createdBy', '==', filters.createdBy);
     const snapshot = await query.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
@@ -77,8 +88,11 @@ export class Contract {
   }
 
   static async update(id, data) {
+    const existing = await this.getById(id);
+    if (!existing) return null;
+
     await db().collection(COLLECTION).doc(id).update({
-      ...this.sanitize(data),
+      ...this.sanitize({ ...existing, ...data }),
       updatedAt: new Date()
     });
     return this.getById(id);
@@ -90,41 +104,13 @@ export class Contract {
 
   static async getAnalytics(organizationId, projectId) {
     const records = await this.getAll(organizationId, projectId);
-    const totals = records.reduce((acc, record) => {
-      const activities = Array.isArray(record.activities) ? record.activities : [];
-      const completedActivities = activities.filter((activity) =>
-        String(activity.status || '').toLowerCase() === 'completed'
-      ).length;
-      const beneficiaries = Array.isArray(record.beneficiaries) ? record.beneficiaries : [];
-      const reached = beneficiaries.reduce((sum, item) => sum + asNumber(item.numberReached), 0);
-
-      acc.projects += 1;
-      acc.budget += asNumber(record.budget);
-      acc.expense += asNumber(record.expense) || activities.reduce((sum, item) => sum + asNumber(item.budgetUsed), 0);
-      acc.activities += activities.length;
-      acc.activitiesCompleted += completedActivities;
-      acc.beneficiariesReached += reached || asNumber(record.beneficiaryTotal);
-      acc.performance += asNumber(record.performance);
-      acc.completion += asNumber(record.completion);
-      return acc;
-    }, {
-      projects: 0,
-      budget: 0,
-      expense: 0,
-      activities: 0,
-      activitiesCompleted: 0,
-      beneficiariesReached: 0,
-      performance: 0,
-      completion: 0
-    });
-
-    const denominator = totals.projects || 1;
+    const aggregated = aggregateMeMetrics(records);
     return {
-      ...totals,
-      budgetUtilization: totals.budget ? Math.round((totals.expense / totals.budget) * 100) : 0,
-      activityCompletion: totals.activities ? Math.round((totals.activitiesCompleted / totals.activities) * 100) : 0,
-      performance: Math.round(totals.performance / denominator),
-      projectCompletion: Math.round(totals.completion / denominator),
+      ...aggregated,
+      budgetUtilization: formatUtilizationPercent(aggregated.budgetUtilization),
+      activityCompletion: formatUtilizationPercent(aggregated.activityCompletion),
+      performance: formatUtilizationPercent(aggregated.performance),
+      projectCompletion: formatUtilizationPercent(aggregated.projectCompletion),
       records
     };
   }

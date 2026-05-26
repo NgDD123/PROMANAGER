@@ -20,6 +20,7 @@ export const NGO_SCOPE_ROUTE_MAP = {
 
 export function isNgoStaffMember(user) {
   if (!user) return false;
+  if (user.isChurchStaff) return true;
   if (user.roleId || user.isSubRole) return true;
 
   const roleName = String(user.roleName || user.role || '').trim().toLowerCase();
@@ -40,6 +41,7 @@ export function getNgoNavigationScopes(user) {
 
 export function getDefaultNgoPath(user) {
   if (isNgoAdminUser(user)) return '/ngo/dashboard';
+  if (user?.isChurchStaff) return '/ngo/church';
 
   const scopes = getNgoNavigationScopes(user) || [];
   const scopeToPath = {
@@ -52,6 +54,7 @@ export function getDefaultNgoPath(user) {
     'beneficial-owners': '/ngo/beneficial-owners',
     'service-control': '/ngo/service-control',
     settings: '/ngo/settings',
+    church: '/ngo/church',
   };
 
   const firstScope = scopes.find((scope) => scopeToPath[scope]);

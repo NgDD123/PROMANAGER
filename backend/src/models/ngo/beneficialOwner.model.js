@@ -25,6 +25,7 @@ export class BeneficialOwner {
       documents: data.documents || [],
       notes: data.notes,
       status: data.status || 'active',
+      createdBy: data.createdBy,
       createdAt: new Date(),
       updatedAt: new Date()
     });
@@ -36,6 +37,7 @@ export class BeneficialOwner {
     if (organizationId) query = query.where('organizationId', '==', organizationId);
     if (filters.status) query = query.where('status', '==', filters.status);
     if (filters.verificationStatus) query = query.where('verificationStatus', '==', filters.verificationStatus);
+    if (filters.createdBy) query = query.where('createdBy', '==', filters.createdBy);
     const snapshot = await query.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }

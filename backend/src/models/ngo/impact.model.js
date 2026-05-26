@@ -6,16 +6,18 @@ export class Impact {
       ...data,
       organizationId: data.organizationId,
       projectId: data.projectId,
+      createdBy: data.createdBy,
       createdAt: new Date(),
       updatedAt: new Date()
     });
     return { id: docRef.id, ...data };
   }
 
-  static async getAll(organizationId, projectId) {
+  static async getAll(organizationId, projectId, filters = {}) {
     let query = db().collection('ngo_impacts');
     if (organizationId) query = query.where('organizationId', '==', organizationId);
     if (projectId) query = query.where('projectId', '==', projectId);
+    if (filters.createdBy) query = query.where('createdBy', '==', filters.createdBy);
     const snapshot = await query.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }

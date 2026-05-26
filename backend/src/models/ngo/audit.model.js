@@ -35,6 +35,7 @@ export class Audit {
     if (filters.auditType) query = query.where('auditType', '==', filters.auditType);
     if (filters.status) query = query.where('status', '==', filters.status);
     if (filters.riskLevel) query = query.where('riskLevel', '==', filters.riskLevel);
+    if (filters.createdBy) query = query.where('createdBy', '==', filters.createdBy);
     const snapshot = await query.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }

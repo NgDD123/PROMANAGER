@@ -9,8 +9,11 @@ import {
   getAuditTrail,
   getComplianceStatus
 } from '../../controllers/ngo/audit.controller.js';
+import { ngoProtected } from '../../middleware/ngoResource.middleware.js';
 
 const router = express.Router();
+
+router.use(...ngoProtected);
 
 router.post('/', createAudit);
 router.get('/', getAllAudits);

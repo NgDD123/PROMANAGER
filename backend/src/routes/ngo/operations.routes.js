@@ -1,7 +1,14 @@
 import express from 'express';
 import { db } from '../../../utils/firebase.js';
+import { ngoProtected } from '../../middleware/ngoResource.middleware.js';
+import {
+  canAccessNgoRecord,
+  filterRecordsByOwner,
+} from '../../utils/ngoOwnership.js';
 
 const router = express.Router();
+
+router.use(...ngoProtected);
 
 // Branches
 router.get('/branches', async (req, res) => {
@@ -23,66 +30,6 @@ router.get('/branches', async (req, res) => {
 router.post('/branches', async (req, res) => {
   try {
     const docRef = await db().collection('ngo_branches').add({
-      ...req.body,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-    res.status(201).json({ success: true, data: { id: docRef.id, ...req.body } });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Field Sites
-router.get('/field-sites', async (req, res) => {
-  try {
-    const { branchId, status } = req.query;
-    let query = db().collection('ngo_field_sites');
-    
-    if (branchId) query = query.where('branchId', '==', branchId);
-    if (status) query = query.where('status', '==', status);
-    
-    const snapshot = await query.get();
-    const sites = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.json({ success: true, data: sites });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.post('/field-sites', async (req, res) => {
-  try {
-    const docRef = await db().collection('ngo_field_sites').add({
-      ...req.body,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-    res.status(201).json({ success: true, data: { id: docRef.id, ...req.body } });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Field Visits
-router.get('/field-visits', async (req, res) => {
-  try {
-    const { siteId, officer } = req.query;
-    let query = db().collection('ngo_field_visits');
-    
-    if (siteId) query = query.where('siteId', '==', siteId);
-    if (officer) query = query.where('officer', '==', officer);
-    
-    const snapshot = await query.get();
-    const visits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.json({ success: true, data: visits });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.post('/field-visits', async (req, res) => {
-  try {
-    const docRef = await db().collection('ngo_field_visits').add({
       ...req.body,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -172,23 +119,6 @@ router.get('/beneficiaries', async (req, res) => {
   }
 });
 
-// GPS Locations
-router.get('/gps-locations', async (req, res) => {
-  try {
-    const branches = await db().collection('ngo_branches').where('gps', '!=', '').get();
-    const sites = await db().collection('ngo_field_sites').where('gps', '!=', '').get();
-    
-    const locations = [
-      ...branches.docs.map(doc => ({ id: doc.id, type: 'branch', ...doc.data() })),
-      ...sites.docs.map(doc => ({ id: doc.id, type: 'site', ...doc.data() }))
-    ];
-    
-    res.json({ success: true, data: locations });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Service Health
 router.get('/service-health', async (req, res) => {
   try {
@@ -240,27 +170,25 @@ const professionalCollections = {
   'donor-reports': 'ngo_donor_reports',
   'income-transactions': 'ngo_income_transactions',
   'expense-transactions': 'ngo_expense_transactions',
-  'beneficial-owners': 'ngo_beneficial_owners',
-  contracts: 'ngo_contracts',
-  storages: 'ngo_storages',
-  tenders: 'ngo_tenders',
-  projects: 'ngo_projects',
-  impacts: 'ngo_impacts',
-  evaluations: 'ngo_evaluations',
+  // contracts, storages, impacts, evaluations, beneficial-owners, projects, tenders:
+  // served by dedicated authenticated routes (see server.js)
 };
 
 const createProfessionalRouter = (resource, collectionName) => {
   router.get(`/${resource}`, async (req, res) => {
     try {
-      const { organizationId, projectId, status } = req.query;
+      const { projectId, status } = req.query;
       let query = db().collection(collectionName);
 
-      if (organizationId) query = query.where('organizationId', '==', organizationId);
+      if (req.organizationId) query = query.where('organizationId', '==', req.organizationId);
       if (projectId) query = query.where('projectId', '==', projectId);
       if (status) query = query.where('status', '==', status);
+      if (!req.isNgoAdmin) query = query.where('createdBy', '==', req.ngoUserId);
 
       const snapshot = await query.get();
-      res.json({ success: true, data: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+      let data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      data = filterRecordsByOwner(req, data);
+      res.json({ success: true, data });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -269,12 +197,15 @@ const createProfessionalRouter = (resource, collectionName) => {
   router.post(`/${resource}`, async (req, res) => {
     try {
       const now = new Date();
-      const docRef = await db().collection(collectionName).add({
+      const payload = {
         ...req.body,
+        organizationId: req.organizationId,
+        createdBy: req.ngoUserId,
         createdAt: now,
-        updatedAt: now
-      });
-      res.status(201).json({ success: true, data: { id: docRef.id, ...req.body } });
+        updatedAt: now,
+      };
+      const docRef = await db().collection(collectionName).add(payload);
+      res.status(201).json({ success: true, data: { id: docRef.id, ...payload } });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -282,11 +213,23 @@ const createProfessionalRouter = (resource, collectionName) => {
 
   router.put(`/${resource}/:id`, async (req, res) => {
     try {
-      await db().collection(collectionName).doc(req.params.id).set({
+      const docRef = db().collection(collectionName).doc(req.params.id);
+      const existing = await docRef.get();
+      if (!existing.exists) {
+        return res.status(404).json({ success: false, error: 'Not found' });
+      }
+      const record = { id: existing.id, ...existing.data() };
+      if (!canAccessNgoRecord(req, record)) {
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+      const payload = {
         ...req.body,
-        updatedAt: new Date()
-      }, { merge: true });
-      res.json({ success: true, data: { id: req.params.id, ...req.body } });
+        organizationId: req.organizationId,
+        createdBy: record.createdBy || req.ngoUserId,
+        updatedAt: new Date(),
+      };
+      await docRef.set(payload, { merge: true });
+      res.json({ success: true, data: { id: req.params.id, ...payload } });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -294,7 +237,16 @@ const createProfessionalRouter = (resource, collectionName) => {
 
   router.delete(`/${resource}/:id`, async (req, res) => {
     try {
-      await db().collection(collectionName).doc(req.params.id).delete();
+      const docRef = db().collection(collectionName).doc(req.params.id);
+      const existing = await docRef.get();
+      if (!existing.exists) {
+        return res.status(404).json({ success: false, error: 'Not found' });
+      }
+      const record = { id: existing.id, ...existing.data() };
+      if (!canAccessNgoRecord(req, record)) {
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+      await docRef.delete();
       res.json({ success: true, data: { id: req.params.id } });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -303,19 +255,29 @@ const createProfessionalRouter = (resource, collectionName) => {
 
   router.patch(`/${resource}/:id/approve`, async (req, res) => {
     try {
+      const docRef = db().collection(collectionName).doc(req.params.id);
+      const existing = await docRef.get();
+      if (!existing.exists) {
+        return res.status(404).json({ success: false, error: 'Not found' });
+      }
+      const record = { id: existing.id, ...existing.data() };
+      if (!canAccessNgoRecord(req, record)) {
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+
       const payload = {
         approvalStatus: req.body.approvalStatus || 'Approved',
         status: req.body.status,
         approvedBy: req.body.approvedBy || req.body.user || 'Finance Approver',
         approvedAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       };
 
-      Object.keys(payload).forEach(key => {
+      Object.keys(payload).forEach((key) => {
         if (payload[key] === undefined) delete payload[key];
       });
 
-      await db().collection(collectionName).doc(req.params.id).set(payload, { merge: true });
+      await docRef.set(payload, { merge: true });
       res.json({ success: true, data: { id: req.params.id, ...payload } });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
@@ -662,49 +624,6 @@ router.get('/compliance-reports', async (req, res) => {
 router.post('/compliance-reports', async (req, res) => {
   try {
     const docRef = await db().collection('ngo_compliance_reports').add({ ...req.body, createdAt: new Date() });
-    res.status(201).json({ success: true, data: { id: docRef.id, ...req.body } });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Permissions & Documents
-router.get('/permissions', async (req, res) => {
-  try {
-    const { organizationId } = req.query;
-    let query = db().collection('ngo_permissions');
-    if (organizationId) query = query.where('organizationId', '==', organizationId);
-    const snapshot = await query.get();
-    res.json({ success: true, data: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.post('/permissions', async (req, res) => {
-  try {
-    const docRef = await db().collection('ngo_permissions').add({ ...req.body, createdAt: new Date() });
-    res.status(201).json({ success: true, data: { id: docRef.id, ...req.body } });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.get('/documents', async (req, res) => {
-  try {
-    const { organizationId } = req.query;
-    let query = db().collection('ngo_documents');
-    if (organizationId) query = query.where('organizationId', '==', organizationId);
-    const snapshot = await query.get();
-    res.json({ success: true, data: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-router.post('/documents', async (req, res) => {
-  try {
-    const docRef = await db().collection('ngo_documents').add({ ...req.body, createdAt: new Date() });
     res.status(201).json({ success: true, data: { id: docRef.id, ...req.body } });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

@@ -11,11 +11,12 @@ const envFiles = [
   join(backendRoot, `.env.${nodeEnv}`),
 ];
 
-for (const envPath of envFiles) {
+envFiles.forEach((envPath, index) => {
   if (existsSync(envPath)) {
-    dotenv.config({ path: envPath, override: false });
+    // .env should win over empty shell exports; env-specific file fills gaps only.
+    dotenv.config({ path: envPath, override: index === 0 });
   }
-}
+});
 
 // Keep NODE_ENV from the shell/npm script when set (e.g. production deploys).
 process.env.NODE_ENV = nodeEnv;

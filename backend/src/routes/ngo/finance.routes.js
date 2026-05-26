@@ -8,8 +8,11 @@ import {
   getFinancialSummary,
   getFinancesByProject
 } from '../../controllers/ngo/finance.controller.js';
+import { ngoProtected } from '../../middleware/ngoResource.middleware.js';
 
 const router = express.Router();
+
+router.use(...ngoProtected);
 
 router.post('/', createFinance);
 router.get('/', getAllFinances);

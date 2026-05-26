@@ -18,6 +18,7 @@ import { setUserStatus } from '../models/status.model.js';
 import { isCredentialExpired, credentialExpiryMessage } from '../utils/credentialExpiry.js';
 import { normalizeRoleName, isServiceUserRole } from '../config/serviceUserRoles.config.js';
 import { getDefaultNgoPath } from '../config/ngoNavigationScopes.config.js';
+import { resolveChurchBranchContext } from '../utils/churchBranchContext.js';
 import {
   getRedirectPathForRole,
   resolveUserRoleName,
@@ -397,19 +398,30 @@ async function tryNgoUser(email, password) {
     }
   }
 
+  if (user.isChurchStaff) {
+    const branchCtx = await resolveChurchBranchContext(user, roleContext);
+    roleContext = {
+      ...roleContext,
+      isChurchStaff: true,
+      churchNavigationScopes: user.churchNavigationScopes || [],
+      isSubRole: true,
+      branchId: branchCtx.branchId,
+      branchName: branchCtx.branchName,
+    };
+  }
+
+  const sessionUser = {
+    ...userResponse,
+    role: user.roleName || 'NGO_ADMIN',
+    ...roleContext,
+  };
+
   return buildResult({
     service: 'ngo',
     token,
-    user: {
-      ...userResponse,
-      role: user.roleName || 'NGO_ADMIN',
-      ...roleContext,
-    },
+    user: sessionUser,
     organization,
-    redirectPath: getDefaultNgoPath({
-      ...userResponse,
-      ...roleContext,
-    }),
+    redirectPath: getDefaultNgoPath(sessionUser),
   });
 }
 

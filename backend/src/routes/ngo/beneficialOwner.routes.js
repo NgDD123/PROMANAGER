@@ -9,8 +9,11 @@ import {
   getOwnershipStructure,
   getPoliticallyExposed
 } from '../../controllers/ngo/beneficialOwner.controller.js';
+import { ngoProtected } from '../../middleware/ngoResource.middleware.js';
 
 const router = express.Router();
+
+router.use(...ngoProtected);
 
 router.post('/', createBeneficialOwner);
 router.get('/', getAllBeneficialOwners);

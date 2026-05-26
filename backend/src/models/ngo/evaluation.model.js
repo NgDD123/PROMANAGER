@@ -6,6 +6,7 @@ export class Evaluation {
       ...data,
       organizationId: data.organizationId,
       projectId: data.projectId,
+      createdBy: data.createdBy,
       status: data.status || 'pending',
       createdAt: new Date(),
       updatedAt: new Date()
@@ -13,10 +14,11 @@ export class Evaluation {
     return { id: docRef.id, ...data };
   }
 
-  static async getAll(organizationId, projectId) {
+  static async getAll(organizationId, projectId, filters = {}) {
     let query = db().collection('ngo_evaluations');
     if (organizationId) query = query.where('organizationId', '==', organizationId);
     if (projectId) query = query.where('projectId', '==', projectId);
+    if (filters.createdBy) query = query.where('createdBy', '==', filters.createdBy);
     const snapshot = await query.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
