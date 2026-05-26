@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development nodemon src/server.js",
+    "dev": "set NODE_ENV=development&& nodemon src/server.js",
     "start": "NODE_ENV=production node src/server.js",
     "start:dev": "NODE_ENV=development node src/server.js",
     "start:prod": "NODE_ENV=production node src/server.js",

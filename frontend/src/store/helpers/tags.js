@@ -67,6 +67,7 @@ export const API_TAGS = [
   'NgoContract',
   'NgoTender',
   'NgoImpact',
+  'NgoEvaluation',
   'NgoAudit',
   'NgoOrgChart',
   'NgoBeneficialOwner',

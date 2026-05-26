@@ -11,9 +11,19 @@ export const createContract = async (req, res) => {
 
 export const getAllContracts = async (req, res) => {
   try {
-    const { organizationId, projectId } = req.query;
-    const contracts = await Contract.getAll(organizationId, projectId);
+    const { organizationId, projectId, status } = req.query;
+    const contracts = await Contract.getAll(organizationId, projectId, { status });
     res.json({ success: true, data: contracts });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const getContractAnalytics = async (req, res) => {
+  try {
+    const { organizationId, projectId } = req.query;
+    const analytics = await Contract.getAnalytics(organizationId, projectId);
+    res.json({ success: true, data: analytics });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

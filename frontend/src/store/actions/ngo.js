@@ -193,6 +193,15 @@ const ngoApi = baseAPI.injectEndpoints({
       tag: 'NgoContract',
     }),
 
+    getNgoMonitoringSummary: builder.query({
+      query: (params) =>
+        params && typeof params === 'object' && Object.keys(params).length
+          ? { url: '/ngo/contracts/analytics/summary', params }
+          : '/ngo/contracts/analytics/summary',
+      providesTags: ['NgoContract'],
+      transformResponse: unwrapNgoData,
+    }),
+
     ...ngoCrud(builder, {
       plural: 'NgoTenders',
       singular: 'NgoTender',
@@ -342,6 +351,7 @@ export const {
   useCreateNgoContractMutation,
   useUpdateNgoContractMutation,
   useDeleteNgoContractMutation,
+  useGetNgoMonitoringSummaryQuery,
   useGetNgoTendersQuery,
   useGetNgoTenderByIdQuery,
   useCreateNgoTenderMutation,
