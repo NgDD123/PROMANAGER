@@ -86,9 +86,23 @@ async function tryPlatformUser(email, password) {
   if (user.status !== 'active') throw inactiveError();
 
   const roleName = user.role?.role_name || '';
-  const isSuperAdmin = normalizeRoleName(roleName) === 'SUPER_ADMIN';
+  const normalized = normalizeRoleName(roleName);
+  const isSuperAdmin = normalized === 'SUPER_ADMIN';
 
-  // Let service-specific providers handle non–super-admin accounts (same email may exist in hospitalAdmins, etc.)
+  // Service platform users must also have a service-layer account (users, hospitalAdmins, etc.)
+  if (!isSuperAdmin && isServiceUserRole(normalized)) {
+    if (normalized.includes('STOCK')) {
+      const stockUser = await getStockUserByEmail(email);
+      if (!stockUser) {
+        throw authError(
+          'Stock admin account is not provisioned for login. Run backend seed:gbma-users to create the stock user.',
+          403,
+        );
+      }
+    }
+    return null;
+  }
+
   if (!isSuperAdmin) {
     return null;
   }

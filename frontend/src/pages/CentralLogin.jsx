@@ -7,6 +7,8 @@ import { applyUnifiedLogin } from '../utils/applyUnifiedLogin.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useHospitalAuth } from '../context/HospitalAuthContext.jsx';
 import { useHRAuth } from '../context/HRAuthContext.jsx';
+import { useStockAuth } from '../context/StockAuthContext.jsx';
+import { resolveUserRoleName } from '../config/loginRedirect.js';
 
 export default function CentralLogin() {
   const navigate = useNavigate();
@@ -14,6 +16,7 @@ export default function CentralLogin() {
   const { hospitalLogin } = useAuth();
   const { login: hospitalAuthLogin } = useHospitalAuth();
   const { login: hrLogin } = useHRAuth();
+  const { setAccessToken, setUser } = useStockAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,7 +31,16 @@ export default function CentralLogin() {
 
     try {
       const result = await unifiedLogin(email, password);
-      const applied = applyUnifiedLogin(result, { hospitalLogin, hospitalAuthLogin, hrLogin });
+      const applied = applyUnifiedLogin(result, {
+        hospitalLogin,
+        hospitalAuthLogin,
+        hrLogin,
+        stockLoginState: (token, sessionUser) => {
+          setAccessToken(token);
+          const roleName = resolveUserRoleName(sessionUser);
+          setUser(sessionUser ? { ...sessionUser, role: roleName || sessionUser.role } : null);
+        },
+      });
 
       if (applied.requiresPasswordCompletion) {
         const completePath =

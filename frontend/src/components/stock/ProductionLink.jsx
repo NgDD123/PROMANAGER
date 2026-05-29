@@ -21,6 +21,7 @@ import {
   ExpandMore,
 } from "@mui/icons-material";
 import { useStockAuth } from "../../context/StockAuthContext.jsx";
+import { filterStockMenuLinks } from "../../utils/stockMenuAccess.js";
 
 const iconMap = {
   "Production Plan": PlanIcon,
@@ -54,11 +55,7 @@ export default function ProductionLinks({ theme, themeColors }) {
     );
   }
 
-  const filteredLinks = user
-    ? (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.role === 'DIRECTOR_MANAGER'
-        ? productionLinks
-        : productionLinks.filter((link) => link.roles.includes(user.role)))
-    : [];
+  const filteredLinks = filterStockMenuLinks(productionLinks, user);
 
   useEffect(() => {
     if (filteredLinks.length > 0) setOpenProduction(true);

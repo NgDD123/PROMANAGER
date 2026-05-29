@@ -1,9 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import {authService} from "../services/authService";
 import axios from "axios";
-import { setServiceAuth, clearServiceAuth, getServiceToken } from "../utils/authCookies.js";
+import {
+  setServiceAuth,
+  clearServiceAuth,
+  getServiceToken,
+  getServiceUser,
+} from "../utils/authCookies.js";
+import { resolveUserRoleName } from "../config/loginRedirect.js";
 
 const StockAuthContext = createContext();
+
+function normalizeStockSessionUser(user) {
+  if (!user) return null;
+  const roleName = resolveUserRoleName(user);
+  if (roleName === "SUPER_ADMIN" || user.legacyRole === "super_admin") {
+    return { ...user, role: "SUPER_ADMIN" };
+  }
+  return roleName ? { ...user, role: roleName } : user;
+}
 
 export function useStockAuth() {
   return useContext(StockAuthContext);
@@ -71,31 +86,41 @@ export function StockAuthProvider({ children }) {
     return () => axios.interceptors.response.eject(interceptor);
   }, [accessToken]);
 
-  // Load user from backend if token exists
+  // Hydrate session from cookies (e.g. after central /login) or stock /me
   useEffect(() => {
     const loadUser = async () => {
-      if (accessToken) {
-        try {
-          // Check if there's a user in localStorage (SuperAdmin case)
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            if (parsedUser.role === 'super_admin') {
-              // SuperAdmin logged in, use stored user data
-              setUser({ ...parsedUser, role: 'SUPER_ADMIN' });
-              setLoading(false);
-              return;
-            }
+      const token = getServiceToken("stock") || localStorage.getItem("token");
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      setAccessToken(token);
+
+      const cookieUser = getServiceUser("stock");
+      if (cookieUser) {
+        setUser(normalizeStockSessionUser(cookieUser));
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser.role === "super_admin" || parsedUser.legacyRole === "super_admin") {
+            setUser({ ...parsedUser, role: "SUPER_ADMIN" });
+            setLoading(false);
+            return;
           }
-          
-          // Regular stock user, fetch from stock auth endpoint
-          const data = await authService.me();
-          setUser(data);
-        } catch {
-          setUser(null);
-          setAccessToken(null);
-          clearServiceAuth("stock");
         }
+
+        const data = await authService.me();
+        setUser(normalizeStockSessionUser(data));
+      } catch {
+        setUser(null);
+        setAccessToken(null);
+        clearServiceAuth("stock");
       }
       setLoading(false);
     };
@@ -133,7 +158,7 @@ export function StockAuthProvider({ children }) {
 
   const hasRole = (roles) => {
     if (!user) return false;
-    const userRole = (user.role || "").toUpperCase();
+    const userRole = (resolveUserRoleName(user) || "").toUpperCase();
     
     // Service / org admins and directors have full stock access
     if (
@@ -154,7 +179,7 @@ export function StockAuthProvider({ children }) {
 
   const inDepartment = (departments) => {
     if (!user) return false;
-    const userRole = (user.role || "").toUpperCase();
+    const userRole = (resolveUserRoleName(user) || "").toUpperCase();
     
     if (
       userRole === "ADMIN" ||

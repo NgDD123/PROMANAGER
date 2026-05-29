@@ -30,8 +30,13 @@ export const requireRole = (...roles) => (req, res, next) => {
   const userRole = (req.user.role || "").toUpperCase();
   const normalizedRoles = roles.map((r) => (r || "").toUpperCase());
   
-  // ADMIN and SUPER_ADMIN have access to everything
-  if (userRole === "ADMIN" || userRole === "SUPER_ADMIN" || userRole === "DIRECTOR_MANAGER") {
+  // Global stock access roles
+  if (
+    userRole === "ADMIN" ||
+    userRole === "SUPER_ADMIN" ||
+    userRole === "DIRECTOR_MANAGER" ||
+    userRole === "STOCK_ADMIN"
+  ) {
     return next();
   }
   
@@ -45,8 +50,13 @@ export const requireDepartment = (...departments) => (req, res, next) => {
   if (!req.user) return res.status(401).json({ message: "Unauthorized" });
   const userRole = (req.user.role || "").toUpperCase();
   
-  // ADMIN and SUPER_ADMIN have access to all departments
-  if (userRole === "ADMIN" || userRole === "SUPER_ADMIN" || userRole === "DIRECTOR_MANAGER") {
+  // Global stock access roles bypass department checks
+  if (
+    userRole === "ADMIN" ||
+    userRole === "SUPER_ADMIN" ||
+    userRole === "DIRECTOR_MANAGER" ||
+    userRole === "STOCK_ADMIN"
+  ) {
     return next();
   }
   

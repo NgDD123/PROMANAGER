@@ -19,6 +19,7 @@ import {
   ExpandMore,
 } from "@mui/icons-material";
 import { useStockAuth } from "../../context/StockAuthContext.jsx";
+import { filterStockMenuLinks } from "../../utils/stockMenuAccess.js";
 
 const iconMap = {
   "Product Settings": ProductSettingsIcon,
@@ -48,11 +49,7 @@ export default function SettingsLinks({ theme, themeColors }) {
     );
   }
 
-  const filteredLinks = user
-    ? (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || user.role === 'DIRECTOR_MANAGER'
-        ? settingsLinks
-        : settingsLinks.filter((link) => link.roles.includes(user.role)))
-    : [];
+  const filteredLinks = filterStockMenuLinks(settingsLinks, user);
 
   useEffect(() => {
     if (filteredLinks.length > 0) setOpenSettings(true);
