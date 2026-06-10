@@ -7,17 +7,22 @@ import {
   deleteOrganization,
   getOrganizationStats,
 } from '../../controllers/ngo/organization.controller.js';
-import { ngoAuth, attachNgoUserContext, requireNgoAdmin } from '../../middleware/ngoAuth.middleware.js';
+import {
+  ngoAuth,
+  attachNgoUserContext,
+  requireNgoAdmin,
+  requireNgoSuperAdmin,
+} from '../../middleware/ngoAuth.middleware.js';
 
 const router = express.Router();
 
 router.use(ngoAuth, attachNgoUserContext, requireNgoAdmin);
 
-router.post('/', createOrganization);
+router.post('/', requireNgoSuperAdmin, createOrganization);
 router.get('/', getAllOrganizations);
 router.get('/:id/stats', getOrganizationStats);
 router.get('/:id', getOrganization);
-router.put('/:id', updateOrganization);
-router.delete('/:id', deleteOrganization);
+router.put('/:id', requireNgoSuperAdmin, updateOrganization);
+router.delete('/:id', requireNgoSuperAdmin, deleteOrganization);
 
 export default router;

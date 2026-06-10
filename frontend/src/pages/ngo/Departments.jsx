@@ -19,6 +19,7 @@ import {
   getNgoErrorMessage,
 } from '../../store/actions/ngo.js';
 import NGOModal, { NGOFormGrid, NGOFormField, NGO_INPUT_CLASS, ngoModalCopy } from '../../components/ngo/NGOModal';
+import { resolveNgoTenantOrganization, ngoEntityModalCopy } from '../../utils/ngoTenant.js';
 
 const EMPTY_FORM = {
   organizationId: '',
@@ -110,6 +111,8 @@ export default function Departments() {
   }, [filterOrg, filterBranch, filterStatus]);
 
   const { data: organizations = [] } = useGetNgoOrganizationsQuery();
+  const { tenantOrganizationId, tenantOrganizationName } = resolveNgoTenantOrganization(organizations);
+
   const { data: branches = [] } = useGetNgoBranchesQuery();
   const {
     data: departments = [],
@@ -123,14 +126,16 @@ export default function Departments() {
     { skip: !filterOrg }
   );
 
+  const activeOrganizationId = formData.organizationId || tenantOrganizationId;
+
   const { data: formBranches = [] } = useGetNgoBranchesQuery(
-    { organizationId: formData.organizationId },
-    { skip: !formData.organizationId }
+    { organizationId: activeOrganizationId },
+    { skip: !activeOrganizationId }
   );
 
   const { data: staff = [] } = useGetNgoUsersQuery(
-    { organizationId: formData.organizationId },
-    { skip: !formData.organizationId }
+    { organizationId: activeOrganizationId },
+    { skip: !activeOrganizationId }
   );
 
   const [createDepartment, { isLoading: creating }] = useCreateNgoDepartmentMutation();
@@ -171,7 +176,7 @@ export default function Departments() {
     setSelectedDept(null);
     setFormData({
       ...EMPTY_FORM,
-      organizationId: filterOrg || organizations[0]?.id || '',
+      organizationId: tenantOrganizationId,
       branchId: filterBranch || ''
     });
     setShowModal(true);
@@ -180,14 +185,14 @@ export default function Departments() {
   const handleEdit = (dept) => {
     setModalMode('edit');
     setSelectedDept(dept);
-    setFormData(normalizeDepartment(dept));
+    setFormData({ ...normalizeDepartment(dept), organizationId: tenantOrganizationId });
     setShowModal(true);
   };
 
   const handleView = (dept) => {
     setModalMode('view');
     setSelectedDept(dept);
-    setFormData(normalizeDepartment(dept));
+    setFormData({ ...normalizeDepartment(dept), organizationId: tenantOrganizationId });
     setShowModal(true);
   };
 
@@ -201,13 +206,16 @@ export default function Departments() {
   };
 
   const handleSave = async () => {
-    if (!formData.organizationId || !formData.branchId || !formData.name?.trim()) {
-      alert('Organization, branch, and department name are required.');
+    if (!formData.branchId || !formData.name?.trim()) {
+      alert('Branch and department name are required.');
       return;
     }
 
     try {
-      const payload = departmentPayload(formData);
+      const payload = departmentPayload({
+        ...formData,
+        organizationId: formData.organizationId || tenantOrganizationId,
+      });
       if (modalMode === 'add') {
         await createDepartment(payload).unwrap();
       } else {
@@ -219,16 +227,9 @@ export default function Departments() {
     }
   };
 
-  const handleOrgChange = (organizationId) => {
-    setFormData({
-      ...formData,
-      organizationId,
-      branchId: '',
-      ...(modalMode !== 'add' ? { parentDepartmentId: '' } : {}),
-    });
-  };
-
-  const modalCopy = ngoModalCopy('Department', modalMode);
+  const modalCopy =
+    ngoEntityModalCopy('Department', modalMode, tenantOrganizationName) ||
+    ngoModalCopy('Department', modalMode);
 
   const filteredDepartments = departments.filter((dept) => {
     const term = searchTerm.toLowerCase();
@@ -443,23 +444,7 @@ export default function Departments() {
               Assignment
             </h3>
             <NGOFormGrid>
-              <NGOFormField label="Organization" required>
-                <select
-                  value={formData.organizationId}
-                  onChange={(e) => handleOrgChange(e.target.value)}
-                  disabled={modalMode === 'view'}
-                  className={NGO_INPUT_CLASS}
-                >
-                  <option value="">Select organization</option>
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
-                </select>
-              </NGOFormField>
-
-              <NGOFormField label="Branch" required>
+              <NGOFormField label="Branch" required colSpan={2}>
                 <select
                   value={formData.branchId}
                   onChange={(e) =>
@@ -469,7 +454,7 @@ export default function Departments() {
                       ...(modalMode !== 'add' ? { parentDepartmentId: '' } : {}),
                     })
                   }
-                  disabled={modalMode === 'view' || !formData.organizationId}
+                  disabled={modalMode === 'view' || !activeOrganizationId}
                   className={NGO_INPUT_CLASS}
                 >
                   <option value="">Select branch</option>
@@ -531,7 +516,7 @@ export default function Departments() {
                 <select
                   value={formData.headId}
                   onChange={(e) => setFormData({ ...formData, headId: e.target.value })}
-                  disabled={modalMode === 'view' || !formData.organizationId}
+                  disabled={modalMode === 'view' || !activeOrganizationId}
                   className={NGO_INPUT_CLASS}
                 >
                   <option value="">Not assigned</option>

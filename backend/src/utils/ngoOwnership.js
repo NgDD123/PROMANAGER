@@ -1,6 +1,20 @@
 /** Shared creator-based access for NGO tenant resources. */
 
+import { ngoUserHasScope } from '../config/ngoNavigationScopes.config.js';
+
+function hasNgoEvaluationScope(req) {
+  if (req.isSuperAdmin || req.isNgoAdmin) return true;
+  return ngoUserHasScope(req.ngoUser, 'evaluations');
+}
+
 export function canAccessNgoRecord(req, record) {
+  if (record?.organizationId && record.organizationId !== req.organizationId) return false;
+  if (req.isNgoAdmin) return true;
+  if (hasNgoEvaluationScope(req)) return true;
+  return record?.createdBy === req.ngoUserId;
+}
+
+export function canMutateNgoRecord(req, record) {
   if (record?.organizationId && record.organizationId !== req.organizationId) return false;
   if (req.isNgoAdmin) return true;
   return record?.createdBy === req.ngoUserId;
@@ -8,11 +22,13 @@ export function canAccessNgoRecord(req, record) {
 
 export function filterRecordsByOwner(req, records = []) {
   if (req.isNgoAdmin) return records;
+  if (hasNgoEvaluationScope(req)) return records;
   return records.filter((record) => record.createdBy === req.ngoUserId);
 }
 
 export function listFilters(req, filters = {}) {
   if (req.isNgoAdmin) return filters;
+  if (hasNgoEvaluationScope(req)) return filters;
   return { ...filters, createdBy: req.ngoUserId };
 }
 

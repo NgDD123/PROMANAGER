@@ -1,14 +1,21 @@
 import { Organization } from '../../models/ngo/organization.model.js';
 
-export const createOrganization = async (_req, res) => {
-  return res.status(403).json({
-    success: false,
-    error: 'Your organization was created at registration. Edit your organization profile instead.',
-  });
+export const createOrganization = async (req, res) => {
+  try {
+    const organization = await Organization.create(req.body);
+    res.status(201).json({ success: true, data: organization });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 };
 
 export const getAllOrganizations = async (req, res) => {
   try {
+    if (req.isSuperAdmin) {
+      const organizations = await Organization.getAll(req.query);
+      return res.json({ success: true, data: organizations });
+    }
+
     const organization = await Organization.getById(req.organizationId);
     res.json({ success: true, data: organization ? [organization] : [] });
   } catch (error) {
@@ -18,7 +25,7 @@ export const getAllOrganizations = async (req, res) => {
 
 export const getOrganization = async (req, res) => {
   try {
-    if (req.params.id !== req.organizationId) {
+    if (!req.isSuperAdmin && req.params.id !== req.organizationId) {
       return res.status(403).json({ success: false, error: 'Access denied for this organization' });
     }
     const organization = await Organization.getById(req.params.id);
@@ -31,7 +38,7 @@ export const getOrganization = async (req, res) => {
 
 export const updateOrganization = async (req, res) => {
   try {
-    if (req.params.id !== req.organizationId) {
+    if (!req.isSuperAdmin && req.params.id !== req.organizationId) {
       return res.status(403).json({ success: false, error: 'Access denied for this organization' });
     }
     const organization = await Organization.update(req.params.id, req.body);
@@ -43,10 +50,8 @@ export const updateOrganization = async (req, res) => {
 
 export const deleteOrganization = async (req, res) => {
   try {
-    return res.status(403).json({
-      success: false,
-      error: 'Organization deletion is not allowed from the admin workspace.',
-    });
+    await Organization.delete(req.params.id);
+    res.json({ success: true, message: 'Organization deleted' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -54,7 +59,7 @@ export const deleteOrganization = async (req, res) => {
 
 export const getOrganizationStats = async (req, res) => {
   try {
-    if (req.params.id !== req.organizationId) {
+    if (!req.isSuperAdmin && req.params.id !== req.organizationId) {
       return res.status(403).json({ success: false, error: 'Access denied for this organization' });
     }
     const stats = await Organization.getStats(req.params.id);

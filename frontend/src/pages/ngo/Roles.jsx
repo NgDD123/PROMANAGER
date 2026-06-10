@@ -23,6 +23,7 @@ import {
   NGO_SUBROLE_NAV_SCOPES,
   formatNavigationScopeLabels,
 } from '../../config/ngoNavigationScopes.js';
+import { resolveNgoTenantOrganization, ngoEntityModalCopy } from '../../utils/ngoTenant.js';
 
 const EMPTY_FORM = {
   organizationId: '',
@@ -128,16 +129,18 @@ export default function Roles() {
     return filters;
   }, [filterOrg]);
 
+  const { data: organizations = [] } = useGetNgoOrganizationsQuery();
+  const { tenantOrganizationId, tenantOrganizationName } = resolveNgoTenantOrganization(organizations);
+  const activeOrganizationId = formData.organizationId || tenantOrganizationId;
+
   const branchListParams = useMemo(() => {
     const filters = {};
-    if (formData.organizationId) filters.organizationId = formData.organizationId;
+    if (activeOrganizationId) filters.organizationId = activeOrganizationId;
     return filters;
-  }, [formData.organizationId]);
-
-  const { data: organizations = [] } = useGetNgoOrganizationsQuery();
+  }, [activeOrganizationId]);
   const { data: allBranches = [] } = useGetNgoBranchesQuery(listParams);
   const { data: formBranches = [] } = useGetNgoBranchesQuery(branchListParams, {
-    skip: !formData.organizationId,
+    skip: !activeOrganizationId,
   });
   const {
     data: rawRoles = [],
@@ -176,7 +179,7 @@ export default function Roles() {
     setSelectedRole(null);
     setFormData({
       ...EMPTY_FORM,
-      organizationId: filterOrg || organizations[0]?.id || '',
+      organizationId: tenantOrganizationId,
       branchId: filterBranch || '',
     });
     setShowModal(true);
@@ -185,14 +188,14 @@ export default function Roles() {
   const handleEdit = (role) => {
     setModalMode('edit');
     setSelectedRole(role);
-    setFormData(normalizeRole(role));
+    setFormData({ ...normalizeRole(role), organizationId: tenantOrganizationId });
     setShowModal(true);
   };
 
   const handleView = (role) => {
     setModalMode('view');
     setSelectedRole(role);
-    setFormData(normalizeRole(role));
+    setFormData({ ...normalizeRole(role), organizationId: tenantOrganizationId });
     setShowModal(true);
   };
 
@@ -210,10 +213,6 @@ export default function Roles() {
   };
 
   const handleSave = async () => {
-    if (!formData.organizationId) {
-      alert('Please select an organization.');
-      return;
-    }
     if (!formData.branchId) {
       alert('Please select a branch for this sub-role.');
       return;
@@ -240,7 +239,9 @@ export default function Roles() {
     }
   };
 
-  const modalCopy = ngoModalCopy('Sub-Role', modalMode);
+  const modalCopy =
+    ngoEntityModalCopy('Sub-Role', modalMode, tenantOrganizationName) ||
+    ngoModalCopy('Sub-Role', modalMode);
 
   const filteredRoles = roles.filter((role) => {
     const term = searchTerm.toLowerCase();
@@ -427,27 +428,11 @@ export default function Roles() {
       >
         <div className="space-y-6">
           <NGOFormGrid>
-            <NGOFormField label="Organization" required colSpan={2}>
-              <select
-                value={formData.organizationId}
-                onChange={(e) =>
-                  setFormData({ ...formData, organizationId: e.target.value, branchId: '' })
-                }
-                disabled={modalMode === 'view'}
-                className={NGO_INPUT_CLASS}
-              >
-                <option value="">Select organization</option>
-                {organizations.map((org) => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
-                ))}
-              </select>
-            </NGOFormField>
-
             <NGOFormField label="Branch" required colSpan={2}>
               <select
                 value={formData.branchId}
                 onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                disabled={modalMode === 'view' || !formData.organizationId}
+                disabled={modalMode === 'view' || !activeOrganizationId}
                 className={NGO_INPUT_CLASS}
               >
                 <option value="">Select branch</option>

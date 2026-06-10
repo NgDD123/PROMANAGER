@@ -20,6 +20,19 @@ export function ngoAuth(req, res, next) {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    const isSuperAdmin =
+      decoded.role === 'super_admin' ||
+      decoded.role === 'SUPER_ADMIN' ||
+      decoded.userType === 'super_admin';
+
+    if (isSuperAdmin) {
+      req.isSuperAdmin = true;
+      req.ngoUserId = decoded.id;
+      req.organizationId = decoded.organizationId || null;
+      req.userRole = 'super_admin';
+      return next();
+    }
+
     if (!decoded.organizationId) {
       return res.status(403).json({ success: false, error: 'No organization assigned to this account' });
     }
@@ -36,6 +49,7 @@ export function ngoAuth(req, res, next) {
 
 /** Reject access when the route targets a different organization than the signed-in admin. */
 export function assertNgoOrgAccess(req, res, next) {
+  if (req.isSuperAdmin) return next();
   const targetId = req.params.organizationId || req.params.id;
   if (targetId && targetId !== req.organizationId) {
     return res.status(403).json({ success: false, error: 'Access denied for this organization' });
@@ -45,6 +59,7 @@ export function assertNgoOrgAccess(req, res, next) {
 
 /** Force list/create payloads to the tenant organization from the JWT. */
 export function bindNgoTenant(req, _res, next) {
+  if (req.isSuperAdmin && !req.organizationId) return next();
   req.query.organizationId = req.organizationId;
   if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
     req.body.organizationId = req.organizationId;
@@ -53,6 +68,7 @@ export function bindNgoTenant(req, _res, next) {
 }
 
 export function denyForeignNgoResource(req, res, resource) {
+  if (req.isSuperAdmin) return false;
   if (!resource) {
     res.status(404).json({ success: false, error: 'Not found' });
     return true;
@@ -67,6 +83,21 @@ export function denyForeignNgoResource(req, res, resource) {
 /** Load NGO user record and role scopes after JWT auth. */
 export async function attachNgoUserContext(req, res, next) {
   try {
+    if (req.isSuperAdmin) {
+      req.ngoUser = {
+        id: req.ngoUserId,
+        organizationId: req.organizationId,
+        roleName: 'SUPER_ADMIN',
+        role: 'SUPER_ADMIN',
+        userType: 'super_admin',
+      };
+      req.isNgoAdmin = true;
+      req.navigationScopes = null;
+      req.churchNavigationScopes = [];
+      req.canManageChurchUsers = true;
+      return next();
+    }
+
     const user = await NGOUser.getById(req.ngoUserId);
     if (!user) {
       return res.status(401).json({ success: false, error: 'User not found' });
@@ -101,13 +132,18 @@ export async function attachNgoUserContext(req, res, next) {
 }
 
 export function requireNgoAdmin(req, res, next) {
-  if (req.isNgoAdmin) return next();
+  if (req.isSuperAdmin || req.isNgoAdmin) return next();
   return res.status(403).json({ success: false, error: 'Administrator access required' });
+}
+
+export function requireNgoSuperAdmin(req, res, next) {
+  if (req.isSuperAdmin) return next();
+  return res.status(403).json({ success: false, error: 'Super admin access required' });
 }
 
 export function requireNgoScope(...scopeIds) {
   return (req, res, next) => {
-    if (req.isNgoAdmin) return next();
+    if (req.isSuperAdmin || req.isNgoAdmin) return next();
     const allowed = scopeIds.some((scopeId) => ngoUserHasScope(req.ngoUser, scopeId));
     if (allowed) return next();
     return res.status(403).json({ success: false, error: 'You do not have access to this module' });

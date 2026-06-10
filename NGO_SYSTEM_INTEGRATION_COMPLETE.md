@@ -400,7 +400,7 @@ Navigate to: `http://localhost:5173/ngo`
 
 ### 9. Map Field Sites
 1. Go to **Field GIS** tab
-2. Add project locations with GPS
+2. Create New project locations with GPS
 3. Track beneficiaries
 4. Log field visits
 

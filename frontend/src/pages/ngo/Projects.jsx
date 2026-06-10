@@ -6,7 +6,13 @@ import {
   Eye,
   Edit,
   Trash2,
-  Loader2
+  Loader2,
+  Building2,
+  Calendar,
+  User,
+  HandCoins,
+  Target,
+  Users
 } from 'lucide-react';
 import {
   useGetNgoProjectsQuery,
@@ -17,6 +23,7 @@ import {
   getNgoErrorMessage,
 } from '../../store/actions/ngo.js';
 import NGOModal, { NGOFormGrid, NGOFormField, NGO_INPUT_CLASS, ngoModalCopy } from '../../components/ngo/NGOModal';
+import { resolveNgoTenantOrganization, ngoEntityModalCopy } from '../../utils/ngoTenant.js';
 
 const STATUS_OPTIONS = ['Planning', 'Active', 'On Hold', 'Closed'];
 
@@ -29,11 +36,11 @@ const EMPTY_FORM = {
   manager: '',
   startDate: '',
   endDate: '',
-  budget: '0',
-  spent: '0',
-  beneficiariesTarget: '0',
-  beneficiariesReached: '0',
-  status: 'Planning',
+  budget: '',
+  spent: '',
+  beneficiariesTarget: '',
+  beneficiariesReached: '',
+  status: '',
   outcome: ''
 };
 
@@ -48,32 +55,37 @@ function normalizeProject(project) {
     manager: project.manager || '',
     startDate: project.startDate || '',
     endDate: project.endDate || '',
-    budget: project.budget != null ? String(project.budget) : '0',
-    spent: project.spent != null ? String(project.spent) : '0',
-    beneficiariesTarget: project.beneficiariesTarget != null ? String(project.beneficiariesTarget) : '0',
-    beneficiariesReached: project.beneficiariesReached != null ? String(project.beneficiariesReached) : '0',
-    status: project.status || 'Planning',
+    budget: project.budget != null && project.budget !== '' ? String(project.budget) : '',
+    spent: project.spent != null && project.spent !== '' ? String(project.spent) : '',
+    beneficiariesTarget: project.beneficiariesTarget != null && project.beneficiariesTarget !== '' ? String(project.beneficiariesTarget) : '',
+    beneficiariesReached: project.beneficiariesReached != null && project.beneficiariesReached !== '' ? String(project.beneficiariesReached) : '',
+    status: project.status || '',
     outcome: project.outcome || project.expectedOutcome || ''
   };
 }
 
-function projectPayload(formData) {
-  return {
+function projectPayload(formData, { isCreate = false } = {}) {
+  const payload = {
     organizationId: formData.organizationId,
-    code: formData.code?.trim(),
     name: formData.name?.trim(),
     programArea: formData.programArea?.trim() || '',
     donor: formData.donor?.trim() || '',
     manager: formData.manager?.trim() || '',
     startDate: formData.startDate || '',
     endDate: formData.endDate || '',
-    budget: Number(formData.budget) || 0,
-    spent: Number(formData.spent) || 0,
-    beneficiariesTarget: Number(formData.beneficiariesTarget) || 0,
-    beneficiariesReached: Number(formData.beneficiariesReached) || 0,
+    budget: formData.budget === '' ? 0 : Number(formData.budget) || 0,
+    spent: formData.spent === '' ? 0 : Number(formData.spent) || 0,
+    beneficiariesTarget: formData.beneficiariesTarget === '' ? 0 : Number(formData.beneficiariesTarget) || 0,
+    beneficiariesReached: formData.beneficiariesReached === '' ? 0 : Number(formData.beneficiariesReached) || 0,
     status: formData.status || 'Planning',
     outcome: formData.outcome?.trim() || ''
   };
+
+  if (!isCreate && formData.code?.trim()) {
+    payload.code = formData.code.trim();
+  }
+
+  return payload;
 }
 
 function formatCurrency(amount) {
@@ -88,6 +100,91 @@ function statusBadgeClass(status) {
   if (s === 'on hold') return 'bg-amber-100 text-amber-800';
   if (s === 'closed') return 'bg-gray-100 text-gray-600';
   return 'bg-gray-100 text-gray-600';
+}
+
+function formatDateLabel(value) {
+  if (!value) return '—';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatTimeline(startDate, endDate) {
+  if (!startDate && !endDate) return '—';
+  return `${formatDateLabel(startDate)} → ${formatDateLabel(endDate)}`;
+}
+
+function ProjectDetailItem({ icon: Icon, label, value, iconClass = 'text-gray-500' }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2 ${iconClass}`}>
+        <Icon size={14} />
+        {label}
+      </div>
+      <p className="text-sm font-medium text-gray-900">{value || '—'}</p>
+    </div>
+  );
+}
+
+function ProjectViewPanel({ project, organizationName, onEdit }) {
+  const outcome = project.outcome || project.expectedOutcome || '';
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-teal-100 bg-linear-to-br from-teal-50 via-white to-white p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="w-14 h-14 bg-teal-100 rounded-xl flex items-center justify-center shrink-0">
+              <FolderKanban className="text-teal-600" size={28} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-xl font-bold text-gray-900 break-words">{project.name}</h3>
+              <p className="text-sm text-gray-500 mt-1 font-mono">{project.code || '—'}</p>
+              <p className="text-sm text-gray-600 mt-2 flex items-center gap-1.5">
+                <Building2 size={15} className="text-teal-600 shrink-0" />
+                <span className="truncate">{organizationName}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={`px-3 py-1 text-sm font-medium rounded-full ${statusBadgeClass(project.status)}`}>
+              {project.status || 'Planning'}
+            </span>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+            >
+              <Edit size={15} />
+              Edit
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <ProjectDetailItem icon={Target} label="Program Area" value={project.programArea} iconClass="text-indigo-600" />
+        <ProjectDetailItem icon={HandCoins} label="Donor" value={project.donor} iconClass="text-amber-600" />
+        <ProjectDetailItem icon={User} label="Manager" value={project.manager} iconClass="text-blue-600" />
+        <ProjectDetailItem
+          icon={Calendar}
+          label="Project Period"
+          value={formatTimeline(project.startDate, project.endDate)}
+          iconClass="text-teal-600"
+        />
+      </div>
+
+      {outcome ? (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+            <Users size={14} className="text-teal-600" />
+            Expected Outcome
+          </div>
+          <p className="text-sm leading-relaxed text-gray-800 whitespace-pre-wrap">{outcome}</p>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export default function Projects() {
@@ -107,6 +204,7 @@ export default function Projects() {
   }, [filterOrg, filterStatus]);
 
   const { data: organizations = [] } = useGetNgoOrganizationsQuery();
+  const { tenantOrganizationId, tenantOrganizationName } = resolveNgoTenantOrganization(organizations);
   const {
     data: projects = [],
     isLoading: loading,
@@ -133,7 +231,7 @@ export default function Projects() {
     setSelectedProject(null);
     setFormData({
       ...EMPTY_FORM,
-      organizationId: filterOrg || organizations[0]?.id || ''
+      organizationId: tenantOrganizationId
     });
     setShowModal(true);
   };
@@ -141,14 +239,14 @@ export default function Projects() {
   const handleEdit = (project) => {
     setModalMode('edit');
     setSelectedProject(project);
-    setFormData(normalizeProject(project));
+    setFormData({ ...normalizeProject(project), organizationId: tenantOrganizationId });
     setShowModal(true);
   };
 
   const handleView = (project) => {
     setModalMode('view');
     setSelectedProject(project);
-    setFormData(normalizeProject(project));
+    setFormData({ ...normalizeProject(project), organizationId: tenantOrganizationId });
     setShowModal(true);
   };
 
@@ -162,17 +260,19 @@ export default function Projects() {
   };
 
   const handleSave = async () => {
-    if (!formData.organizationId) {
-      alert('Please select an organization.');
-      return;
-    }
-    if (!formData.code?.trim() || !formData.name?.trim()) {
-      alert('Project code and name are required.');
+    if (!formData.name?.trim()) {
+      alert('Project name is required.');
       return;
     }
 
     try {
-      const payload = projectPayload(formData);
+      const payload = projectPayload(
+        {
+          ...formData,
+          organizationId: formData.organizationId || tenantOrganizationId,
+        },
+        { isCreate: modalMode === 'add' }
+      );
       if (modalMode === 'add') {
         await createProject(payload).unwrap();
       } else {
@@ -184,9 +284,10 @@ export default function Projects() {
     }
   };
 
-  const modalCopy = ngoModalCopy('Project', modalMode);
-  const formSubtitle =
-    'Define the program model, budget, outcomes, manager, timeline, and beneficiary targets before approval.';
+  const modalCopy =
+    ngoEntityModalCopy('Project', modalMode, tenantOrganizationName) ||
+    ngoModalCopy('Project', modalMode);
+  const formSubtitle = modalCopy.subtitle;
 
   const filteredProjects = projects.filter((project) => {
     const term = searchTerm.toLowerCase();
@@ -377,175 +478,109 @@ export default function Projects() {
         open={showModal}
         onClose={() => setShowModal(false)}
         mode={modalMode}
-        title={modalMode === 'add' ? 'Create / Update Project' : modalCopy.title}
-        subtitle={formSubtitle}
+        title={modalMode === 'view' ? formData.name || modalCopy.title : modalCopy.title}
+        subtitle={
+          modalMode === 'view'
+            ? formData.code
+              ? `Project code: ${formData.code}`
+              : formSubtitle
+            : formSubtitle
+        }
         onSave={handleSave}
         saving={saving}
-        saveLabel={modalMode === 'add' ? 'Create Project' : 'Save Project'}
+        saveLabel={modalMode === 'add' ? 'Create Project' : 'Update Project'}
         maxWidth="4xl"
       >
-        <NGOFormGrid>
-          <NGOFormField label="Organization" required colSpan={2}>
-            <select
-              value={formData.organizationId}
-              onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            >
-              <option value="">Select organization</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
-            </select>
-          </NGOFormField>
+        {modalMode === 'view' && selectedProject ? (
+          <ProjectViewPanel
+            project={selectedProject}
+            organizationName={orgById[selectedProject.organizationId]?.name || tenantOrganizationName}
+            onEdit={() => handleEdit(selectedProject)}
+          />
+        ) : (
+          <NGOFormGrid>
+            <NGOFormField label="Project Name" required>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className={NGO_INPUT_CLASS}
+                placeholder="e.g. Rural Health Outreach"
+              />
+            </NGOFormField>
 
-          <NGOFormField label="Project Code" required>
-            <input
-              type="text"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="e.g. PRJ-HEALTH-2026"
-            />
-          </NGOFormField>
+            <NGOFormField label="Program Area">
+              <input
+                type="text"
+                value={formData.programArea}
+                onChange={(e) => setFormData({ ...formData, programArea: e.target.value })}
+                className={NGO_INPUT_CLASS}
+                placeholder="e.g. Health, Education"
+              />
+            </NGOFormField>
 
-          <NGOFormField label="Project Name" required>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="e.g. Rural Health Outreach"
-            />
-          </NGOFormField>
+            <NGOFormField label="Donor">
+              <input
+                type="text"
+                value={formData.donor}
+                onChange={(e) => setFormData({ ...formData, donor: e.target.value })}
+                className={NGO_INPUT_CLASS}
+                placeholder="Funding partner"
+              />
+            </NGOFormField>
 
-          <NGOFormField label="Program Area">
-            <input
-              type="text"
-              value={formData.programArea}
-              onChange={(e) => setFormData({ ...formData, programArea: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="e.g. Health, Education"
-            />
-          </NGOFormField>
+            <NGOFormField label="Manager">
+              <input
+                type="text"
+                value={formData.manager}
+                onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
+                className={NGO_INPUT_CLASS}
+                placeholder="Project manager name"
+              />
+            </NGOFormField>
 
-          <NGOFormField label="Donor">
-            <input
-              type="text"
-              value={formData.donor}
-              onChange={(e) => setFormData({ ...formData, donor: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Funding partner"
-            />
-          </NGOFormField>
+            <NGOFormField label="Start Date">
+              <input
+                type="date"
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                className={NGO_INPUT_CLASS}
+              />
+            </NGOFormField>
 
-          <NGOFormField label="Manager">
-            <input
-              type="text"
-              value={formData.manager}
-              onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-              placeholder="Project manager name"
-            />
-          </NGOFormField>
+            <NGOFormField label="End Date">
+              <input
+                type="date"
+                value={formData.endDate}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                className={NGO_INPUT_CLASS}
+              />
+            </NGOFormField>
 
-          <NGOFormField label="Start Date">
-            <input
-              type="date"
-              value={formData.startDate}
-              onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            />
-          </NGOFormField>
+            <NGOFormField label="Status">
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className={NGO_INPUT_CLASS}
+              >
+                <option value="">Select status</option>
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </NGOFormField>
 
-          <NGOFormField label="End Date">
-            <input
-              type="date"
-              value={formData.endDate}
-              onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            />
-          </NGOFormField>
-
-          <NGOFormField label="Budget">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={formData.budget}
-              onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            />
-          </NGOFormField>
-
-          <NGOFormField label="Spent">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={formData.spent}
-              onChange={(e) => setFormData({ ...formData, spent: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            />
-          </NGOFormField>
-
-          <NGOFormField label="Target Beneficiaries">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={formData.beneficiariesTarget}
-              onChange={(e) => setFormData({ ...formData, beneficiariesTarget: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            />
-          </NGOFormField>
-
-          <NGOFormField label="Reached Beneficiaries">
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={formData.beneficiariesReached}
-              onChange={(e) => setFormData({ ...formData, beneficiariesReached: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            />
-          </NGOFormField>
-
-          <NGOFormField label="Status" required>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              disabled={modalMode === 'view'}
-              className={NGO_INPUT_CLASS}
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </NGOFormField>
-
-          <NGOFormField label="Expected Outcome" colSpan={2}>
-            <textarea
-              value={formData.outcome}
-              onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
-              disabled={modalMode === 'view'}
-              rows={3}
-              className={NGO_INPUT_CLASS}
-              placeholder="Primary outcome this project aims to achieve"
-            />
-          </NGOFormField>
-        </NGOFormGrid>
+            <NGOFormField label="Expected Outcome" colSpan={2}>
+              <textarea
+                value={formData.outcome}
+                onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
+                rows={3}
+                className={NGO_INPUT_CLASS}
+                placeholder="Primary outcome this project aims to achieve"
+              />
+            </NGOFormField>
+          </NGOFormGrid>
+        )}
       </NGOModal>
     </div>
   );

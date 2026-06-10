@@ -7,6 +7,7 @@ const SCOPE_VALUES = ['organization', 'branches', 'department', 'all'];
 export const NAVIGATION_SCOPE_VALUES = [
   'projects',
   'contracts',
+  'evaluations',
   'gis',
   'finance',
   'impact',

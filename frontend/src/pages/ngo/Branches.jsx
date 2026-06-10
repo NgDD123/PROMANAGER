@@ -20,6 +20,7 @@ import {
 } from '../../store/actions/ngo.js';
 import NGOModal, { NGOFormGrid, NGOFormField, NGO_INPUT_CLASS, ngoModalCopy } from '../../components/ngo/NGOModal';
 import { todayDateInputValue } from '../../utils/ngoDate';
+import { resolveNgoTenantOrganization, ngoEntityModalCopy } from '../../utils/ngoTenant.js';
 
 export default function Branches() {
   const [showModal, setShowModal] = useState(false);
@@ -51,6 +52,7 @@ export default function Branches() {
   }, [filterOrg, filterType]);
 
   const { data: organizations = [] } = useGetNgoOrganizationsQuery();
+  const { tenantOrganizationId, tenantOrganizationName } = resolveNgoTenantOrganization(organizations);
   const {
     data: branches = [],
     isLoading: loading,
@@ -72,7 +74,7 @@ export default function Branches() {
     setFormData({
       name: '',
       code: '',
-      organizationId: organizations[0]?.id || '',
+      organizationId: tenantOrganizationId,
       type: 'Field Office',
       country: '',
       city: '',
@@ -89,14 +91,14 @@ export default function Branches() {
   const handleEdit = (branch) => {
     setModalMode('edit');
     setSelectedBranch(branch);
-    setFormData(branch);
+    setFormData({ ...branch, organizationId: tenantOrganizationId });
     setShowModal(true);
   };
 
   const handleView = (branch) => {
     setModalMode('view');
     setSelectedBranch(branch);
-    setFormData(branch);
+    setFormData({ ...branch, organizationId: tenantOrganizationId });
     setShowModal(true);
   };
 
@@ -112,10 +114,11 @@ export default function Branches() {
 
   const handleSave = async () => {
     try {
+      const payload = { ...formData, organizationId: tenantOrganizationId };
       if (modalMode === 'add') {
-        await createBranch(formData).unwrap();
+        await createBranch(payload).unwrap();
       } else if (modalMode === 'edit') {
-        await updateBranch({ id: selectedBranch.id, ...formData }).unwrap();
+        await updateBranch({ id: selectedBranch.id, ...payload }).unwrap();
       }
       setShowModal(false);
     } catch (err) {
@@ -123,7 +126,9 @@ export default function Branches() {
     }
   };
 
-  const modalCopy = ngoModalCopy('Branch', modalMode);
+  const modalCopy =
+    ngoEntityModalCopy('Branch', modalMode, tenantOrganizationName) ||
+    ngoModalCopy('Branch', modalMode);
 
   const filteredBranches = branches.filter((branch) => {
     const q = searchTerm.toLowerCase();
@@ -312,22 +317,6 @@ export default function Branches() {
               Branch details
             </h3>
             <NGOFormGrid>
-              <NGOFormField label="Organization" required colSpan={2}>
-                <select
-                  value={formData.organizationId}
-                  onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
-                  disabled={modalMode === 'view'}
-                  className={NGO_INPUT_CLASS}
-                >
-                  <option value="">Select Organization</option>
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
-                </select>
-              </NGOFormField>
-
               <NGOFormField label="Branch Name" required>
                 <input
                   type="text"

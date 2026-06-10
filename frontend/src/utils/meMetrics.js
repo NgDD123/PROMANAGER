@@ -28,14 +28,14 @@ export function parseActivityProgress(item) {
 function populatedIndicators(record) {
   const rows = Array.isArray(record.indicators) ? record.indicators : [];
   return rows.filter((item) =>
-    isPopulatedRow(item, ['name', 'description', 'type', 'target', 'current', 'baseline'])
+    isPopulatedRow(item, ['name', 'description', 'type', 'unit', 'frequency'])
   );
 }
 
 function populatedBeneficiaries(record) {
   const rows = Array.isArray(record.beneficiaries) ? record.beneficiaries : [];
   return rows.filter((item) =>
-    isPopulatedRow(item, ['name', 'category', 'location', 'numberReached', 'servicesReceived'])
+    isPopulatedRow(item, ['name', 'category', 'gender', 'ageGroup', 'numberReached', 'servicesReceived'])
   );
 }
 

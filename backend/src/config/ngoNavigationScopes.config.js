@@ -1,14 +1,28 @@
+/** Sidebar routes reserved for platform super admin (not tenant NGO admins). */
+export const NGO_SUPER_ADMIN_ONLY_PATHS = ['/ngo/organizations'];
+
 export const NGO_ADMIN_ONLY_PATHS = [
-  '/ngo/organizations',
   '/ngo/branches',
   '/ngo/departments',
   '/ngo/roles',
   '/ngo/staff',
+  '/ngo/diamond-forms',
 ];
+
+export function isNgoSuperAdminUser(user) {
+  if (!user) return false;
+  const roleName = String(user.roleName || user.role || '').trim().toUpperCase();
+  return (
+    roleName === 'SUPER_ADMIN' ||
+    user.legacyRole === 'super_admin' ||
+    user.userType === 'super_admin'
+  );
+}
 
 export const NGO_SCOPE_ROUTE_MAP = {
   projects: 'projects',
   contracts: 'contracts',
+  evaluations: 'evaluations',
   gis: 'gis',
   finance: 'finances',
   impact: 'impacts',
@@ -47,6 +61,7 @@ export function getDefaultNgoPath(user) {
   const scopeToPath = {
     projects: '/ngo/projects',
     contracts: '/ngo/contracts',
+    evaluations: '/ngo/evaluations',
     gis: '/ngo/gis',
     finance: '/ngo/finance',
     impact: '/ngo/impact',

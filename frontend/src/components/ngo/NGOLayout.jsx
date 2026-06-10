@@ -10,6 +10,7 @@ import {
   Briefcase,
   FileText,
   BarChart3,
+  ClipboardCheck,
   Church,
   LayoutDashboard,
   Users,
@@ -18,7 +19,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  LogOut
+  LogOut,
+  Gem
 } from 'lucide-react';
 import { clearServiceAuth, getServiceUser, getServiceOrganization, CENTRAL_LOGIN_PATH } from '../../utils/authCookies.js';
 import { getWorkspaceOrganization, getServiceLabel } from '../../config/serviceContext.js';
@@ -34,14 +36,16 @@ const menuItems = [
   { path: '/ngo/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/ngo/organizations', icon: Building2, label: 'Organization' },
   { path: '/ngo/branches', icon: Globe2, label: 'Branches' },
-  { path: '/ngo/departments', icon: Network, label: 'Departments' },
   { path: '/ngo/roles', icon: ShieldCheck, label: 'Roles' },
+  { path: '/ngo/departments', icon: Network, label: 'Departments' },
   { path: '/ngo/staff', icon: Users, label: 'Staff' },
   { path: '/ngo/projects', icon: Briefcase, label: 'Projects & Tenders' },
   { path: '/ngo/contracts', icon: FileText, label: 'Contracts & Storage' },
+  { path: '/ngo/evaluations', icon: ClipboardCheck, label: 'Evaluations' },
   { path: '/ngo/finance', icon: DollarSign, label: 'Finance' },
   { path: '/ngo/impact', icon: BarChart3, label: 'Organization Report' },
   { path: '/ngo/church', icon: Church, label: 'Church Management' },
+  { path: '/ngo/diamond-forms', icon: Gem, label: 'Diamond Forms' },
   { path: '/ngo/settings', icon: Settings, label: 'Settings' }
 ];
 

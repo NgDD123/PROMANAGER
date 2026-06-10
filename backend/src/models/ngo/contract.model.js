@@ -13,6 +13,30 @@ function asNumber(value) {
   return Number(value) || 0;
 }
 
+function sanitizeEvaluatorSubmission(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return { responses: {}, submittedAt: '', submittedBy: '' };
+  }
+
+  const hasWrapper = 'responses' in data || 'submittedAt' in data || 'submittedBy' in data;
+  if (!hasWrapper) {
+    return {
+      responses: data,
+      submittedAt: '',
+      submittedBy: '',
+    };
+  }
+
+  return {
+    responses:
+      data.responses && typeof data.responses === 'object' && !Array.isArray(data.responses)
+        ? data.responses
+        : {},
+    submittedAt: String(data.submittedAt || '').trim(),
+    submittedBy: String(data.submittedBy || '').trim(),
+  };
+}
+
 export class Contract {
   static sanitize(data = {}) {
     const base = stripUndefined({
@@ -32,6 +56,56 @@ export class Contract {
       targetArea: (data.targetArea || '').trim(),
       branchRegion: (data.branchRegion || data.region || '').trim(),
       goal: (data.goal || data.projectGoal || '').trim(),
+      outcomesFormId: (data.outcomesFormId || '').trim(),
+      outcomesResponses:
+        data.outcomesResponses && typeof data.outcomesResponses === 'object' && !Array.isArray(data.outcomesResponses)
+          ? data.outcomesResponses
+          : {},
+      indicatorsFormId: (data.indicatorsFormId || '').trim(),
+      indicatorsResponses:
+        data.indicatorsResponses && typeof data.indicatorsResponses === 'object' && !Array.isArray(data.indicatorsResponses)
+          ? data.indicatorsResponses
+          : {},
+      activitiesFormId: (data.activitiesFormId || '').trim(),
+      activitiesResponses:
+        data.activitiesResponses && typeof data.activitiesResponses === 'object' && !Array.isArray(data.activitiesResponses)
+          ? data.activitiesResponses
+          : {},
+      beneficiariesFormId: (data.beneficiariesFormId || '').trim(),
+      beneficiariesResponses:
+        data.beneficiariesResponses && typeof data.beneficiariesResponses === 'object' && !Array.isArray(data.beneficiariesResponses)
+          ? data.beneficiariesResponses
+          : {},
+      risksFormId: (data.risksFormId || '').trim(),
+      risksResponses:
+        data.risksResponses && typeof data.risksResponses === 'object' && !Array.isArray(data.risksResponses)
+          ? data.risksResponses
+          : {},
+      outcomesEvaluatorResponses:
+        data.outcomesEvaluatorResponses && typeof data.outcomesEvaluatorResponses === 'object' && !Array.isArray(data.outcomesEvaluatorResponses)
+          ? data.outcomesEvaluatorResponses
+          : {},
+      indicatorsEvaluatorResponses:
+        data.indicatorsEvaluatorResponses && typeof data.indicatorsEvaluatorResponses === 'object' && !Array.isArray(data.indicatorsEvaluatorResponses)
+          ? data.indicatorsEvaluatorResponses
+          : {},
+      activitiesEvaluatorResponses:
+        data.activitiesEvaluatorResponses && typeof data.activitiesEvaluatorResponses === 'object' && !Array.isArray(data.activitiesEvaluatorResponses)
+          ? data.activitiesEvaluatorResponses
+          : {},
+      beneficiariesEvaluatorResponses:
+        data.beneficiariesEvaluatorResponses && typeof data.beneficiariesEvaluatorResponses === 'object' && !Array.isArray(data.beneficiariesEvaluatorResponses)
+          ? data.beneficiariesEvaluatorResponses
+          : {},
+      risksEvaluatorResponses:
+        data.risksEvaluatorResponses && typeof data.risksEvaluatorResponses === 'object' && !Array.isArray(data.risksEvaluatorResponses)
+          ? data.risksEvaluatorResponses
+          : {},
+      outcomesEvaluatorSubmission: sanitizeEvaluatorSubmission(data.outcomesEvaluatorSubmission),
+      indicatorsEvaluatorSubmission: sanitizeEvaluatorSubmission(data.indicatorsEvaluatorSubmission),
+      activitiesEvaluatorSubmission: sanitizeEvaluatorSubmission(data.activitiesEvaluatorSubmission),
+      beneficiariesEvaluatorSubmission: sanitizeEvaluatorSubmission(data.beneficiariesEvaluatorSubmission),
+      risksEvaluatorSubmission: sanitizeEvaluatorSubmission(data.risksEvaluatorSubmission),
       objectives: Array.isArray(data.objectives) ? data.objectives : [],
       expectedOutcomes: Array.isArray(data.expectedOutcomes) ? data.expectedOutcomes : [],
       expectedOutputs: Array.isArray(data.expectedOutputs) ? data.expectedOutputs : [],

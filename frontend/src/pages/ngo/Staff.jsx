@@ -28,6 +28,7 @@ import {
   getNgoErrorMessage,
 } from '../../store/actions/ngo.js';
 import NGOModal, { NGOFormGrid, NGOFormField, NGO_INPUT_CLASS, ngoModalCopy } from '../../components/ngo/NGOModal';
+import { resolveNgoTenantOrganization, ngoEntityModalCopy } from '../../utils/ngoTenant.js';
 
 const ACCOUNT_STATUSES = ['Invited', 'Active', 'Suspended', 'Locked'];
 
@@ -132,14 +133,16 @@ export default function Staff() {
     return filters;
   }, [filterOrg, filterBranch]);
 
+  const { data: organizations = [] } = useGetNgoOrganizationsQuery();
+  const { tenantOrganizationId, tenantOrganizationName } = resolveNgoTenantOrganization(organizations);
+  const activeOrganizationId = formData.organizationId || tenantOrganizationId;
+
   const formDeptParams = useMemo(() => {
     const filters = {};
-    if (formData.organizationId) filters.organizationId = formData.organizationId;
+    if (activeOrganizationId) filters.organizationId = activeOrganizationId;
     if (formData.branchId) filters.branchId = formData.branchId;
     return filters;
-  }, [formData.organizationId, formData.branchId]);
-
-  const { data: organizations = [] } = useGetNgoOrganizationsQuery();
+  }, [activeOrganizationId, formData.branchId]);
   const { data: allBranches = [] } = useGetNgoBranchesQuery();
   const { data: allDepartments = [] } = useGetNgoDepartmentsQuery();
   const {
@@ -160,18 +163,18 @@ export default function Staff() {
   );
 
   const { data: formBranches = [] } = useGetNgoBranchesQuery(
-    { organizationId: formData.organizationId },
-    { skip: !showStaffModal || !formData.organizationId }
+    { organizationId: activeOrganizationId },
+    { skip: !showStaffModal || !activeOrganizationId }
   );
 
   const { data: formRoles = [] } = useGetNgoRolesQuery(
-    { organizationId: formData.organizationId },
-    { skip: !showStaffModal || !formData.organizationId }
+    { organizationId: activeOrganizationId },
+    { skip: !showStaffModal || !activeOrganizationId }
   );
 
   const { data: formDepartments = [] } = useGetNgoDepartmentsQuery(
     formDeptParams,
-    { skip: !showStaffModal || !formData.organizationId }
+    { skip: !showStaffModal || !activeOrganizationId }
   );
 
   const [createUser, { isLoading: creating }] = useCreateNgoUserMutation();
@@ -215,17 +218,6 @@ export default function Staff() {
     [formRoles]
   );
 
-  const handleFormOrgChange = (organizationId) => {
-    setFormData({
-      ...formData,
-      organizationId,
-      branchId: '',
-      departmentId: '',
-      roleId: '',
-      roleName: ''
-    });
-  };
-
   const handleFormBranchChange = (branchId) => {
     setFormData({
       ...formData,
@@ -239,7 +231,7 @@ export default function Staff() {
     setSelectedStaff(null);
     setFormData({
       ...EMPTY_FORM,
-      organizationId: filterOrg || '',
+      organizationId: tenantOrganizationId,
       branchId: filterBranch || '',
       departmentId: filterDept || ''
     });
@@ -249,14 +241,14 @@ export default function Staff() {
   const handleEdit = (member) => {
     setModalMode('edit');
     setSelectedStaff(member);
-    setFormData(normalizeStaff(member));
+    setFormData({ ...normalizeStaff(member), organizationId: tenantOrganizationId });
     setShowStaffModal(true);
   };
 
   const handleView = (member) => {
     setModalMode('view');
     setSelectedStaff(member);
-    setFormData(normalizeStaff(member));
+    setFormData({ ...normalizeStaff(member), organizationId: tenantOrganizationId });
     setShowStaffModal(true);
   };
 
@@ -293,14 +285,17 @@ export default function Staff() {
     }
 
     if (modalMode === 'add') {
-      if (!formData.organizationId || !formData.branchId || !formData.departmentId) {
-        alert('Organization, branch, and department are required when adding staff.');
+      if (!formData.branchId || !formData.departmentId) {
+        alert('Branch and department are required when adding staff.');
         return;
       }
     }
 
     try {
-      const payload = staffPayload(formData);
+      const payload = staffPayload({
+        ...formData,
+        organizationId: formData.organizationId || tenantOrganizationId,
+      });
       if (modalMode === 'add') {
         const result = await createUser(payload).unwrap();
         const emailWasSent = result.emailSent === true || result.invitationEmailSent === true;
@@ -332,7 +327,9 @@ export default function Staff() {
     });
   };
 
-  const modalCopy = ngoModalCopy('Staff Member', modalMode);
+  const modalCopy =
+    ngoEntityModalCopy('Staff Member', modalMode, tenantOrganizationName) ||
+    ngoModalCopy('Staff Member', modalMode);
 
   const filteredStaff = staffList.filter((member) => {
     const term = searchTerm.toLowerCase();
@@ -596,24 +593,11 @@ export default function Staff() {
         <NGOFormGrid>
           {(modalMode === 'add' || modalMode === 'edit') && (
             <>
-              <NGOFormField label="Organization" required colSpan={2}>
-                <select
-                  value={formData.organizationId}
-                  onChange={(e) => handleFormOrgChange(e.target.value)}
-                  disabled={modalMode === 'view'}
-                  className={NGO_INPUT_CLASS}
-                >
-                  <option value="">Select organization</option>
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>{org.name}</option>
-                  ))}
-                </select>
-              </NGOFormField>
               <NGOFormField label="Branch" required>
                 <select
                   value={formData.branchId}
                   onChange={(e) => handleFormBranchChange(e.target.value)}
-                  disabled={modalMode === 'view' || !formData.organizationId}
+                  disabled={modalMode === 'view' || !activeOrganizationId}
                   className={NGO_INPUT_CLASS}
                 >
                   <option value="">Select branch</option>

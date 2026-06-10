@@ -92,6 +92,27 @@ const ngoApi = baseAPI.injectEndpoints({
     }),
 
     ...ngoCrud(builder, {
+      plural: 'NgoDiamondForms',
+      singular: 'NgoDiamondForm',
+      path: '/ngo/diamond-forms',
+      tag: 'NgoDiamondForm',
+    }),
+
+    ...ngoCrud(builder, {
+      plural: 'NgoDiamondOptions',
+      singular: 'NgoDiamondOption',
+      path: '/ngo/diamond-options',
+      tag: 'NgoDiamondOption',
+    }),
+
+    ...ngoCrud(builder, {
+      plural: 'NgoDiamondSections',
+      singular: 'NgoDiamondSection',
+      path: '/ngo/diamond-sections',
+      tag: 'NgoDiamondSection',
+    }),
+
+    ...ngoCrud(builder, {
       plural: 'NgoRoles',
       singular: 'NgoRole',
       path: ngoPath('roles'),
@@ -234,6 +255,25 @@ const ngoApi = baseAPI.injectEndpoints({
           : '/ngo/contracts/analytics/summary',
       providesTags: ['NgoContract'],
       transformResponse: unwrapNgoData,
+    }),
+
+    getNgoMeModuleAssignments: builder.query({
+      query: (params) => ({
+        url: '/ngo/me-module-assignments',
+        params,
+      }),
+      transformResponse: unwrapNgoData,
+      providesTags: ['NgoMeModuleAssignment'],
+    }),
+
+    upsertNgoMeModuleAssignments: builder.mutation({
+      query: (body) => ({
+        url: '/ngo/me-module-assignments',
+        method: 'PUT',
+        body,
+      }),
+      transformResponse: unwrapNgoData,
+      invalidatesTags: ['NgoMeModuleAssignment'],
     }),
 
     ...ngoCrud(builder, {
@@ -471,6 +511,21 @@ export const {
   useCreateNgoProjectMutation,
   useUpdateNgoProjectMutation,
   useDeleteNgoProjectMutation,
+  useGetNgoDiamondFormsQuery,
+  useGetNgoDiamondFormByIdQuery,
+  useCreateNgoDiamondFormMutation,
+  useUpdateNgoDiamondFormMutation,
+  useDeleteNgoDiamondFormMutation,
+  useGetNgoDiamondOptionsQuery,
+  useGetNgoDiamondOptionByIdQuery,
+  useCreateNgoDiamondOptionMutation,
+  useUpdateNgoDiamondOptionMutation,
+  useDeleteNgoDiamondOptionMutation,
+  useGetNgoDiamondSectionsQuery,
+  useGetNgoDiamondSectionByIdQuery,
+  useCreateNgoDiamondSectionMutation,
+  useUpdateNgoDiamondSectionMutation,
+  useDeleteNgoDiamondSectionMutation,
   useGetNgoRolesQuery,
   useGetNgoRoleByIdQuery,
   useCreateNgoRoleMutation,
@@ -503,6 +558,8 @@ export const {
   useUpdateNgoContractMutation,
   useDeleteNgoContractMutation,
   useGetNgoMonitoringSummaryQuery,
+  useGetNgoMeModuleAssignmentsQuery,
+  useUpsertNgoMeModuleAssignmentsMutation,
   useGetNgoTendersQuery,
   useGetNgoTenderByIdQuery,
   useCreateNgoTenderMutation,

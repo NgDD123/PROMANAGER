@@ -1,15 +1,53 @@
 import { Contract } from '../../models/ngo/contract.model.js';
+import { MeModuleAssignment } from '../../models/ngo/meModuleAssignment.model.js';
 import { aggregateMeMetrics, formatUtilizationPercent } from '../../utils/meMetrics.js';
+import { ngoUserHasScope } from '../../config/ngoNavigationScopes.config.js';
 import {
   createPayload,
   denyUnlessCanAccess,
   filterRecordsByOwner,
   listFilters,
+  canMutateNgoRecord,
   updatePayload,
 } from '../../utils/ngoOwnership.js';
 
 const ME_RECORD_EXISTS_ERROR =
   'You have already added a Monitoring & Evaluation record for this project.';
+
+const MODULE_EVALUATOR_RESPONSE_KEYS = {
+  outcomes: 'outcomesEvaluatorResponses',
+  indicators: 'indicatorsEvaluatorResponses',
+  activities: 'activitiesEvaluatorResponses',
+  beneficiaries: 'beneficiariesEvaluatorResponses',
+  risks: 'risksEvaluatorResponses',
+};
+
+const MODULE_EVALUATOR_SUBMISSION_KEYS = {
+  outcomes: 'outcomesEvaluatorSubmission',
+  indicators: 'indicatorsEvaluatorSubmission',
+  activities: 'activitiesEvaluatorSubmission',
+  beneficiaries: 'beneficiariesEvaluatorSubmission',
+  risks: 'risksEvaluatorSubmission',
+};
+
+async function filterEvaluatorContractBody(req, body = {}) {
+  const assignmentRecord = await MeModuleAssignment.getByOrganizationId(req.organizationId);
+  const allowedKeys = new Set();
+
+  Object.entries(assignmentRecord?.assignments || {}).forEach(([moduleId, entry]) => {
+    if (entry?.evaluatorId !== req.ngoUserId) return;
+    if (MODULE_EVALUATOR_SUBMISSION_KEYS[moduleId]) {
+      allowedKeys.add(MODULE_EVALUATOR_SUBMISSION_KEYS[moduleId]);
+    }
+    if (MODULE_EVALUATOR_RESPONSE_KEYS[moduleId]) {
+      allowedKeys.add(MODULE_EVALUATOR_RESPONSE_KEYS[moduleId]);
+    }
+  });
+
+  return Object.fromEntries(
+    Object.entries(body).filter(([key, value]) => allowedKeys.has(key) && value !== undefined)
+  );
+}
 
 async function findContractForProject(projectId, organizationId) {
   if (!projectId) return null;
@@ -83,7 +121,20 @@ export const updateContract = async (req, res) => {
     const existing = await Contract.getById(req.params.id);
     if (denyUnlessCanAccess(req, res, existing, 'Contract')) return;
 
-    const body = updatePayload(req, existing, req.body);
+    let body = req.body;
+    if (!req.isNgoAdmin && !req.isSuperAdmin && ngoUserHasScope(req.ngoUser, 'evaluations')) {
+      body = await filterEvaluatorContractBody(req, body);
+      if (!Object.keys(body).length) {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only save evaluation responses for modules assigned to you',
+        });
+      }
+    } else if (!canMutateNgoRecord(req, existing)) {
+      return res.status(403).json({ success: false, error: 'Access denied for this contract' });
+    }
+
+    body = updatePayload(req, existing, body);
     const projectIdChanging =
       body.projectId !== undefined &&
       body.projectId &&
@@ -110,6 +161,9 @@ export const deleteContract = async (req, res) => {
   try {
     const existing = await Contract.getById(req.params.id);
     if (denyUnlessCanAccess(req, res, existing, 'Contract')) return;
+    if (!canMutateNgoRecord(req, existing)) {
+      return res.status(403).json({ success: false, error: 'Access denied for this contract' });
+    }
     await Contract.delete(req.params.id);
     res.json({ success: true, message: 'Contract deleted' });
   } catch (error) {

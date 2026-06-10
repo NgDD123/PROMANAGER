@@ -1,4 +1,5 @@
 import { db } from '../../../utils/firebase.js';
+import { generateProjectCode, resolveUniqueProjectCode } from '../../utils/ngoProjectCode.js';
 
 const COLLECTION = 'ngo_projects';
 
@@ -31,6 +32,19 @@ export class Project {
 
   static async create(data) {
     const project = this.sanitize(data);
+    if (!project.name) {
+      throw new Error('Project name is required');
+    }
+
+    if (!project.code) {
+      const existing = await this.getAll(project.organizationId);
+      const baseCode = generateProjectCode(project.name);
+      project.code = resolveUniqueProjectCode(
+        baseCode,
+        existing.map((item) => item.code)
+      );
+    }
+
     const docRef = await db().collection(COLLECTION).add({
       ...project,
       createdAt: new Date(),
@@ -54,7 +68,12 @@ export class Project {
   }
 
   static async update(id, data) {
+    const existing = await this.getById(id);
     const updates = this.sanitize(data);
+    if (!updates.name) {
+      throw new Error('Project name is required');
+    }
+    updates.code = existing?.code || updates.code;
     await db().collection(COLLECTION).doc(id).update({
       ...updates,
       updatedAt: new Date()

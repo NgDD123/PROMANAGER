@@ -1,5 +1,6 @@
 import {
   Briefcase,
+  ClipboardCheck,
   FileText,
   DollarSign,
   BarChart3,
@@ -25,6 +26,7 @@ export function isNgoHiddenModulePath(pathname) {
 export const NGO_SUBROLE_NAV_SCOPES = [
   { id: 'projects', path: '/ngo/projects', label: 'Projects & Tenders', icon: Briefcase },
   { id: 'contracts', path: '/ngo/contracts', label: 'Contracts & Storage', icon: FileText },
+  { id: 'evaluations', path: '/ngo/evaluations', label: 'Evaluations', icon: ClipboardCheck },
   { id: 'finance', path: '/ngo/finance', label: 'Finance', icon: DollarSign },
   { id: 'impact', path: '/ngo/impact', label: 'Organization Report', icon: BarChart3 },
   { id: 'church', path: '/ngo/church', label: 'Church Management', icon: Church },
@@ -33,13 +35,26 @@ export const NGO_SUBROLE_NAV_SCOPES = [
 
 export const NGO_SUBROLE_SCOPE_IDS = NGO_SUBROLE_NAV_SCOPES.map((s) => s.id);
 
+/** Sidebar routes reserved for platform super admin (not tenant NGO admins). */
+export const NGO_SUPER_ADMIN_ONLY_PATHS = ['/ngo/organizations'];
+
 export const NGO_ADMIN_ONLY_PATHS = [
-  '/ngo/organizations',
   '/ngo/branches',
   '/ngo/departments',
   '/ngo/roles',
   '/ngo/staff',
+  '/ngo/diamond-forms',
 ];
+
+export function isNgoSuperAdminUser(user) {
+  if (!user) return false;
+  const roleName = String(user.roleName || user.role || '').trim().toUpperCase();
+  return (
+    roleName === 'SUPER_ADMIN' ||
+    user.legacyRole === 'super_admin' ||
+    user.userType === 'super_admin'
+  );
+}
 
 export function isNgoStaffMember(user) {
   if (!user) return false;
@@ -98,6 +113,14 @@ export function getDefaultNgoPath(user) {
 export function isNgoPathAllowed(pathname, user) {
   if (isNgoHiddenModulePath(pathname)) return false;
 
+  if (
+    NGO_SUPER_ADMIN_ONLY_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    )
+  ) {
+    return isNgoSuperAdminUser(user);
+  }
+
   if (isNgoAdminUser(user)) return true;
 
   if (pathname === '/ngo/access-pending') {
@@ -122,14 +145,19 @@ export function isNgoPathAllowed(pathname, user) {
 }
 
 export function filterNgoMenuItems(menuItems, user) {
-  if (isNgoAdminUser(user)) return menuItems;
+  const visibleItems = menuItems.filter((item) => {
+    if (!NGO_SUPER_ADMIN_ONLY_PATHS.includes(item.path)) return true;
+    return isNgoSuperAdminUser(user);
+  });
+
+  if (isNgoAdminUser(user)) return visibleItems;
 
   if (user.isChurchStaff) {
-    return menuItems.filter((item) => item.path === '/ngo/church');
+    return visibleItems.filter((item) => item.path === '/ngo/church');
   }
 
   const allowedIds = new Set(user.navigationScopes || []);
-  return menuItems.filter((item) => {
+  return visibleItems.filter((item) => {
     const segment = item.path.replace('/ngo/', '');
     if (segment === 'dashboard') return false;
     return allowedIds.has(segment);

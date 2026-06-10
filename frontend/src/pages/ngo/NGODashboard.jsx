@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import ServiceControlCenter from './ServiceControlCenter.jsx';
 import NGOSettingsController from './NGOSettingsController.jsx';
+import { generateProjectCode, resolveUniqueProjectCode } from '../../utils/ngoProjectCode.js';
 import {
   Building2,
   BarChart3,
@@ -648,11 +649,11 @@ const blankProject = {
   manager: '',
   startDate: '',
   endDate: '',
-  budget: 0,
-  spent: 0,
-  beneficiariesTarget: 0,
-  beneficiariesReached: 0,
-  status: 'Planning',
+  budget: '',
+  spent: '',
+  beneficiariesTarget: '',
+  beneficiariesReached: '',
+  status: '',
   outcome: ''
 };
 
@@ -2546,25 +2547,35 @@ export default function NGODashboard() {
 
   const createProject = (event) => {
     event.preventDefault();
-    if (!projectForm.code.trim() || !projectForm.name.trim()) return;
+    if (!projectForm.name.trim()) return;
     updateWorkspace(
       current => {
         const id = projectForm.id || createId('project');
+        const isUpdate = current.projects.some(project => project.id === id);
+        const existingCodes = current.projects
+          .filter(project => project.id !== id)
+          .map(project => project.code);
+        const code = isUpdate && projectForm.code
+          ? projectForm.code
+          : resolveUniqueProjectCode(generateProjectCode(projectForm.name), existingCodes);
         const record = {
           ...projectForm,
           id,
-          budget: Number(projectForm.budget || 0),
-          spent: Number(projectForm.spent || 0),
-          beneficiariesTarget: Number(projectForm.beneficiariesTarget || 0),
-          beneficiariesReached: Number(projectForm.beneficiariesReached || 0)
+          code,
+          budget: projectForm.budget === '' ? 0 : Number(projectForm.budget) || 0,
+          spent: projectForm.spent === '' ? 0 : Number(projectForm.spent) || 0,
+          beneficiariesTarget: projectForm.beneficiariesTarget === '' ? 0 : Number(projectForm.beneficiariesTarget) || 0,
+          beneficiariesReached: projectForm.beneficiariesReached === '' ? 0 : Number(projectForm.beneficiariesReached) || 0,
+          status: projectForm.status || 'Planning'
         };
-        const exists = current.projects.some(project => project.id === id);
         return {
           ...current,
-          projects: exists ? current.projects.map(project => project.id === id ? record : project) : [...current.projects, record]
+          projects: isUpdate
+            ? current.projects.map(project => project.id === id ? record : project)
+            : [...current.projects, record]
         };
       },
-      `Project ${projectForm.id ? 'updated' : 'created'}: ${projectForm.code}`
+      `Project ${projectForm.id ? 'updated' : 'created'}: ${projectForm.name}`
     );
     setProjectForm(blankProject);
   };
@@ -3125,12 +3136,6 @@ export default function NGODashboard() {
                 </div>
 
                 <form onSubmit={createBranch} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-                  <SelectInput
-                    label="Organization"
-                    value={currentOrganization.id}
-                    options={workspace.organizations.map(organization => ({ label: organization.name, value: organization.id }))}
-                    onChange={switchOrganization}
-                  />
                   <Input label="Branch Name" value={branchForm.name} onChange={value => setBranchForm({ ...branchForm, name: value })} required />
                   <SelectInput label="Type" value={branchForm.type} options={branchTypes} onChange={value => setBranchForm({ ...branchForm, type: value })} />
                   <Input label="Region" value={branchForm.region} onChange={value => setBranchForm({ ...branchForm, region: value })} />
@@ -3224,15 +3229,9 @@ export default function NGODashboard() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <SelectField
-                          label="Linked Organization"
-                          value={selectedBranch.organizationId || currentOrganization.id}
-                          options={workspace.organizations.map(organization => ({ label: organization.name, value: organization.id }))}
-                          onChange={value => {
-                            const linkedOrganization = organizationById[value] || currentOrganization;
-                            updateBranch(selectedBranch.id, 'organizationId', value);
-                            updateBranch(selectedBranch.id, 'organization', getOrganizationSnapshot(linkedOrganization));
-                          }}
+                        <ProfileItem
+                          label="Organization"
+                          value={organizationById[selectedBranch.organizationId]?.name || selectedBranch.organization?.name || currentOrganization.name}
                         />
                         <EditableField label="Branch Name" value={selectedBranch.name || ''} onSave={value => updateBranch(selectedBranch.id, 'name', value)} />
                         <SelectField label="Type" value={selectedBranch.type || 'Regional Office'} options={branchTypes} onChange={value => updateBranch(selectedBranch.id, 'type', value)} />
@@ -3383,21 +3382,7 @@ export default function NGODashboard() {
                   </div>
                 </div>
 
-                <form onSubmit={createDepartment} className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
-                  <SelectInput
-                    label="Organization"
-                    value={departmentFormOrganization.id}
-                    options={workspace.organizations.map(organization => ({ label: organization.name, value: organization.id }))}
-                    onChange={value => {
-                      const branches = workspace.branches.filter(branch => !branch.organizationId || branch.organizationId === value);
-                      setDepartmentForm({
-                        ...departmentForm,
-                        organizationId: value,
-                        branchId: branches[0]?.id || ''
-                      });
-                      switchOrganization(value);
-                    }}
-                  />
+                <form onSubmit={createDepartment} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
                   <Input label="Department" value={departmentForm.name} onChange={value => setDepartmentForm({ ...departmentForm, name: value })} required />
                   <SelectInput
                     label="Branch"
@@ -3671,23 +3656,6 @@ export default function NGODashboard() {
                 </div>
 
                 <form onSubmit={createStaff} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
-                  <SelectInput
-                    label="Organization"
-                    value={staffFormOrganization.id}
-                    options={workspace.organizations.map(organization => ({ label: organization.name, value: organization.id }))}
-                    onChange={value => {
-                      const branches = workspace.branches.filter(branch => !branch.organizationId || branch.organizationId === value);
-                      const departments = workspace.departments.filter(department => branches.some(branch => branch.id === department.branchId));
-                      setStaffForm({
-                        ...staffForm,
-                        organizationId: value,
-                        branchId: branches[0]?.id || '',
-                        departmentId: departments[0]?.id || '',
-                        reportsTo: ''
-                      });
-                      switchOrganization(value);
-                    }}
-                  />
                   <Input label="Full Name" value={staffForm.name} onChange={value => setStaffForm({ ...staffForm, name: value })} required />
                   <Input label="Employee ID" value={staffForm.employeeId} onChange={value => setStaffForm({ ...staffForm, employeeId: value })} />
                   <Input label="Role / Position" value={staffForm.role} onChange={value => setStaffForm({ ...staffForm, role: value })} required />
@@ -3757,25 +3725,9 @@ export default function NGODashboard() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <SelectField
+                        <ProfileItem
                           label="Organization"
-                          value={selectedStaff.organizationId || branchById[selectedStaff.branchId]?.organizationId || currentOrganization.id}
-                          options={workspace.organizations.map(organization => ({ label: organization.name, value: organization.id }))}
-                          onChange={value => {
-                            const linkedOrganization = organizationById[value] || currentOrganization;
-                            const branches = workspace.branches.filter(branch => !branch.organizationId || branch.organizationId === value);
-                            const branch = branches[0] || null;
-                            const departments = workspace.departments.filter(department => branches.some(branch => branch.id === department.branchId));
-                            const department = departments[0] || null;
-                            updateStaff(selectedStaff.id, 'organizationId', linkedOrganization.id);
-                            updateStaff(selectedStaff.id, 'organization', getOrganizationSnapshot(linkedOrganization));
-                            updateStaff(selectedStaff.id, 'branchId', branch?.id || '');
-                            updateStaff(selectedStaff.id, 'branch', branch ? { id: branch.id, name: branch.name, type: branch.type, region: branch.region, country: branch.country } : null);
-                            updateStaff(selectedStaff.id, 'departmentId', department?.id || '');
-                            updateStaff(selectedStaff.id, 'department', department ? { id: department.id, name: department.name, branchId: department.branchId, costCenter: department.costCenter } : null);
-                            updateStaff(selectedStaff.id, 'reportsTo', '');
-                            switchOrganization(value);
-                          }}
+                          value={organizationById[selectedStaff.organizationId || branchById[selectedStaff.branchId]?.organizationId]?.name || selectedStaff.organization?.name || currentOrganization.name}
                         />
                         <EditableField label="Full Name" value={selectedStaff.name || ''} onSave={value => updateStaff(selectedStaff.id, 'name', value)} />
                         <EditableField label="Employee ID" value={selectedStaff.employeeId || ''} onSave={value => updateStaff(selectedStaff.id, 'employeeId', value)} />
@@ -3985,15 +3937,6 @@ export default function NGODashboard() {
 
                 <form onSubmit={createRole} className="space-y-4 mb-6 rounded-lg border border-gray-200 p-4">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <SelectInput
-                      label="Organization"
-                      value={roleFormOrganization.id}
-                      options={workspace.organizations.map(organization => ({ label: organization.name, value: organization.id }))}
-                      onChange={value => {
-                        setRoleForm({ ...roleForm, organizationId: value, branchIds: [], departmentIds: [], staffIds: [] });
-                        switchOrganization(value);
-                      }}
-                    />
                     <Input label="Role Name" value={roleForm.name} onChange={value => setRoleForm({ ...roleForm, name: value })} required />
                     <Input label="Description" value={roleForm.description} onChange={value => setRoleForm({ ...roleForm, description: value })} />
                     <SelectInput label="Scope" value={roleForm.scope} options={roleScopes} onChange={value => setRoleForm({ ...roleForm, scope: value })} />
@@ -4083,20 +4026,7 @@ export default function NGODashboard() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <SelectField
-                          label="Organization"
-                          value={selectedRole.organizationId || currentOrganization.id}
-                          options={workspace.organizations.map(organization => ({ label: organization.name, value: organization.id }))}
-                          onChange={value => {
-                            const linkedOrganization = organizationById[value] || currentOrganization;
-                            updateRole(selectedRole.id, 'organizationId', linkedOrganization.id);
-                            updateRole(selectedRole.id, 'organization', getOrganizationSnapshot(linkedOrganization));
-                            updateRole(selectedRole.id, 'branchIds', []);
-                            updateRole(selectedRole.id, 'departmentIds', []);
-                            updateRole(selectedRole.id, 'staffIds', []);
-                            switchOrganization(value);
-                          }}
-                        />
+                        <ProfileItem label="Organization" value={selectedRoleOrganization.name} />
                         <EditableField label="Role Name" value={selectedRole.name || ''} onSave={value => updateRole(selectedRole.id, 'name', value)} />
                         <EditableField label="Description" value={selectedRole.description || ''} onSave={value => updateRole(selectedRole.id, 'description', value)} />
                         <SelectField label="Scope" value={selectedRole.scope || 'Organization'} options={roleScopes} onChange={value => updateRole(selectedRole.id, 'scope', value)} />
@@ -4663,10 +4593,9 @@ export default function NGODashboard() {
                     {projectSection === 'projects' && (
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                         <form onSubmit={createProject} className="rounded-lg border border-gray-200 p-4">
-                          <h4 className="font-bold mb-1">Create / Update Project</h4>
+                          <h4 className="font-bold mb-1">{projectForm.id ? 'Update Project' : 'Create Project'}</h4>
                           <p className="mb-4 text-sm text-gray-600">Define the program model, budget, outcomes, manager, timeline, and beneficiary targets before approval.</p>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <Input label="Project Code" value={projectForm.code} onChange={value => setProjectForm({ ...projectForm, code: value })} required />
                             <Input label="Project Name" value={projectForm.name} onChange={value => setProjectForm({ ...projectForm, name: value })} required />
                             <Input label="Program Area" value={projectForm.programArea} onChange={value => setProjectForm({ ...projectForm, programArea: value })} />
                             <Input label="Donor" value={projectForm.donor} onChange={value => setProjectForm({ ...projectForm, donor: value })} />
@@ -5444,7 +5373,7 @@ function Panel({ title, subtitle, children }) {
   );
 }
 
-function Input({ label, value, onChange, type = 'text', placeholder = '', required = false }) {
+function Input({ label, value, onChange, type = 'text', placeholder = '', required = false, readOnly = false }) {
   return (
     <label className="block">
       <span className="text-xs font-semibold text-gray-600">{label}</span>
@@ -5453,8 +5382,9 @@ function Input({ label, value, onChange, type = 'text', placeholder = '', requir
         value={value}
         required={required}
         placeholder={placeholder}
-        onChange={event => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+        readOnly={readOnly}
+        onChange={readOnly ? undefined : (event => onChange(event.target.value))}
+        className={`mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100${readOnly ? ' bg-gray-50 text-gray-600' : ''}`}
       />
     </label>
   );

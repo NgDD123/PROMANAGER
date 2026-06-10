@@ -231,9 +231,11 @@ import NGOStaff from './pages/ngo/Staff.jsx';
 import NGOProjects from './pages/ngo/Projects.jsx';
 import NGOFinance from './pages/ngo/Finance.jsx';
 import NGOContracts from './pages/ngo/Contracts.jsx';
+import Evaluations from './pages/ngo/Evaluations.jsx';
 import Impact from './pages/ngo/Impact.jsx';
 import ChurchManagement from './pages/ngo/ChurchManagement.jsx';
 import NGOSettings from './pages/ngo/Settings.jsx';
+import DiamondForms from './pages/ngo/DiamondForms.jsx';
 
 function AppContent() {
   return (
@@ -411,6 +413,7 @@ function AppContent() {
         <Route path='users' element={<Navigate to='staff' replace />} />
         <Route path='projects' element={<NGOProjects />} />
         <Route path='contracts' element={<NGOContracts />} />
+        <Route path='evaluations' element={<Evaluations />} />
         <Route path='gis' element={<Navigate to='/ngo/dashboard' replace />} />
         <Route path='finance' element={<NGOFinance />} />
         <Route path='impact' element={<Impact />} />
@@ -419,6 +422,7 @@ function AppContent() {
         <Route path='beneficial-owners' element={<Navigate to='/ngo/dashboard' replace />} />
         <Route path='service-control' element={<Navigate to='/ngo/dashboard' replace />} />
         <Route path='settings' element={<NGOSettings />} />
+        <Route path='diamond-forms' element={<DiamondForms />} />
         <Route path='donors' element={<Navigate to='projects' replace />} />
         <Route path='reports' element={<Navigate to='impact' replace />} />
       </Route>

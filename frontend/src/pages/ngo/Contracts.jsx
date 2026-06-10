@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
-  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -30,10 +30,31 @@ import {
   useGetNgoOrganizationsQuery,
   usePatchNgoContractMutation,
   useGetNgoProjectsQuery,
+  useGetNgoDiamondFormsQuery,
+  useGetNgoDiamondOptionsQuery,
+  useGetNgoDiamondSectionsQuery,
+  useGetNgoMeModuleAssignmentsQuery,
+  useUpsertNgoMeModuleAssignmentsMutation,
   useGetNgoUsersQuery,
   getNgoErrorMessage
 } from '../../store/actions/ngo.js';
 import { NGOFormField, NGOFormGrid, NGO_INPUT_CLASS } from '../../components/ngo/NGOModal.jsx';
+import { DiamondFormRenderer } from '../../components/ngo/DiamondFormRenderer.jsx';
+import {
+  EVALUATION_MODULES,
+  ME_DIAMOND_MODULE_CONFIG,
+  MeEvaluationWorkspace,
+  normalizeMeModuleAssignments,
+  buildStaffEvaluatorOptions,
+  resolveStaffEvaluatorLabel,
+} from '../../components/ngo/MeEvaluationModules.jsx';
+import { isNgoAdminUser } from '../../config/ngoNavigationScopes.js';
+import { getServiceUser } from '../../utils/authCookies.js';
+import { resolveNgoTenantOrganization } from '../../utils/ngoTenant.js';
+import {
+  normalizeDiamondResponses,
+  usageLabel,
+} from '../../utils/diamondForm.js';
 import {
   aggregateMeMetrics,
   deriveMeMetrics,
@@ -43,12 +64,6 @@ import {
 import { usePopup } from '../../context/PopupContext.jsx';
 
 const STATUS_OPTIONS = ['Planning', 'Ongoing', 'Active', 'Completed', 'On Hold', 'Closed'];
-const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
-const INDICATOR_TYPES = ['Input', 'Output', 'Outcome', 'Impact'];
-const UNIT_OPTIONS = ['Number', 'Percentage', 'Currency', 'Quantity'];
-const ACTIVITY_STATUS_OPTIONS = ['Pending', 'Ongoing', 'Completed'];
-const GENDER_OPTIONS = ['Male', 'Female', 'Non-binary', 'Other', 'Prefer not to say'];
-const SEVERITY_OPTIONS = ['Low', 'Medium', 'High'];
 const REPORT_TYPES = ['Monthly report', 'Quarterly report', 'Annual report', 'Donor report', 'Impact report'];
 const EXPORT_TYPES = ['PDF', 'Excel', 'Word'];
 
@@ -61,20 +76,16 @@ const FORM_STEPS = [
   { id: 'indicators', label: 'Indicators', icon: BarChart3 },
   { id: 'activities', label: 'Activities', icon: Activity },
   { id: 'beneficiaries', label: 'Beneficiaries', icon: Users },
-  { id: 'visits', label: 'Field Visits', icon: CalendarDays },
   { id: 'risks', label: 'Risks & Notes', icon: ShieldAlert }
 ];
 
-const WORKSPACE_MODULES = FORM_STEPS.filter((step) => step.id !== 'project');
+const WORKSPACE_MODULES = EVALUATION_MODULES;
 
 const blankIndicator = {
   name: '',
   type: '',
   description: '',
   unit: '',
-  baseline: '',
-  target: '',
-  current: '',
   frequency: ''
 };
 
@@ -85,24 +96,12 @@ const blankActivity = {
   startDate: '',
   endDate: '',
   status: '',
-  budgetUsed: '',
   progress: ''
 };
-
-function staffDisplayName(member) {
-  return member?.fullName || member?.name || '';
-}
-
-function staffOptionLabel(member) {
-  const name = staffDisplayName(member);
-  const detail = member?.jobTitle || member?.roleName || '';
-  return detail ? `${name} — ${detail}` : name;
-}
 
 const blankBeneficiary = {
   name: '',
   category: '',
-  location: '',
   servicesReceived: '',
   numberReached: '',
   gender: '',
@@ -116,17 +115,6 @@ const blankRisk = {
   mitigationPlan: '',
   responsiblePerson: '',
   status: 'Open'
-};
-
-const blankFieldVisit = {
-  visitDate: '',
-  fieldOfficer: '',
-  location: '',
-  purpose: '',
-  findings: '',
-  recommendations: '',
-  photos: '',
-  signatures: ''
 };
 
 const EMPTY_FORM = {
@@ -143,6 +131,16 @@ const EMPTY_FORM = {
   donor: '',
   targetArea: '',
   branchRegion: '',
+  outcomesFormId: '',
+  outcomesResponses: {},
+  indicatorsFormId: '',
+  indicatorsResponses: {},
+  activitiesFormId: '',
+  activitiesResponses: {},
+  beneficiariesFormId: '',
+  beneficiariesResponses: {},
+  risksFormId: '',
+  risksResponses: {},
   goal: '',
   objectives: '',
   expectedOutcomes: '',
@@ -162,7 +160,6 @@ const EMPTY_FORM = {
     'Photos',
     'Supporting Documents'
   ],
-  fieldVisits: [{ ...blankFieldVisit }],
   riskIssues: [{ ...blankRisk }],
   reports: REPORT_TYPES.map((type) => ({ type, status: 'Scheduled', exportFormats: EXPORT_TYPES })),
   gisLocations: [{
@@ -242,8 +239,27 @@ function normalizeRecord(record) {
     indicators: record.indicators?.length ? record.indicators : [{ ...blankIndicator }],
     activities: record.activities?.length ? record.activities : [{ ...blankActivity }],
     beneficiaries: record.beneficiaries?.length ? record.beneficiaries : [{ ...blankBeneficiary }],
-    fieldVisits: record.fieldVisits?.length ? record.fieldVisits : [{ ...blankFieldVisit }],
-    riskIssues: record.riskIssues?.length ? record.riskIssues : [{ ...blankRisk }]
+    riskIssues: record.riskIssues?.length ? record.riskIssues : [{ ...blankRisk }],
+    outcomesFormId: record.outcomesFormId || '',
+    outcomesResponses: record.outcomesResponses && typeof record.outcomesResponses === 'object'
+      ? record.outcomesResponses
+      : {},
+    indicatorsFormId: record.indicatorsFormId || '',
+    indicatorsResponses: record.indicatorsResponses && typeof record.indicatorsResponses === 'object'
+      ? record.indicatorsResponses
+      : {},
+    activitiesFormId: record.activitiesFormId || '',
+    activitiesResponses: record.activitiesResponses && typeof record.activitiesResponses === 'object'
+      ? record.activitiesResponses
+      : {},
+    beneficiariesFormId: record.beneficiariesFormId || '',
+    beneficiariesResponses: record.beneficiariesResponses && typeof record.beneficiariesResponses === 'object'
+      ? record.beneficiariesResponses
+      : {},
+    risksFormId: record.risksFormId || '',
+    risksResponses: record.risksResponses && typeof record.risksResponses === 'object'
+      ? record.risksResponses
+      : {},
   };
 }
 
@@ -261,12 +277,11 @@ const STEP_PAYLOAD_FIELDS = {
     'status',
     'budget'
   ],
-  outcomes: ['goal', 'objectives', 'expectedOutcomes', 'expectedOutputs', 'successCriteria', 'assumptions', 'risks'],
-  indicators: ['indicators'],
-  activities: ['activities'],
-  beneficiaries: ['beneficiaries'],
-  visits: ['fieldVisits'],
-  risks: ['riskIssues', 'notes']
+  outcomes: ['outcomesFormId', 'outcomesResponses'],
+  indicators: ['indicatorsFormId', 'indicatorsResponses'],
+  activities: ['activitiesFormId', 'activitiesResponses'],
+  beneficiaries: ['beneficiariesFormId', 'beneficiariesResponses'],
+  risks: ['risksFormId', 'risksResponses', 'notes'],
 };
 
 function buildPayload(form) {
@@ -284,21 +299,15 @@ function buildPayload(form) {
     successCriteria: splitLines(form.successCriteria),
     assumptions: splitLines(form.assumptions),
     risks: splitLines(form.risks),
-    indicators: form.indicators.map(({ indicatorId: _indicatorId, ...item }) => ({
+    indicators: form.indicators.map(({ indicatorId: _indicatorId, baseline: _baseline, target: _target, current: _current, ...item }) => item),
+    activities: form.activities.map(({ budgetUsed: _budgetUsed, ...item }) => ({
       ...item,
-      baseline: Number(item.baseline) || 0,
-      target: Number(item.target) || 0,
-      current: Number(item.current) || 0
-    })),
-    activities: form.activities.map((item) => ({
-      ...item,
-      budgetUsed: Number(item.budgetUsed) || 0,
       progress:
         item.progress === '' || item.progress == null || item.progress === undefined
           ? ''
           : Number(item.progress)
     })),
-    beneficiaries: form.beneficiaries.map(({ beneficiaryId: _beneficiaryId, ...item }) => ({
+    beneficiaries: form.beneficiaries.map(({ beneficiaryId: _beneficiaryId, location: _location, ...item }) => ({
       ...item,
       numberReached: Number(item.numberReached) || 0
     }))
@@ -362,240 +371,156 @@ function StatCard({ icon: Icon, label, value, caption }) {
   );
 }
 
-function formatListValue(value) {
-  if (Array.isArray(value)) return value.filter((item) => String(item || '').trim());
-  if (typeof value === 'string' && value.trim()) return value.split('\n').map((item) => item.trim()).filter(Boolean);
-  return [];
-}
-
-function isPopulatedRow(item, keys = ['name', 'description', 'indicatorId', 'beneficiaryId', 'riskId', 'fieldOfficer', 'location']) {
-  if (!item || typeof item !== 'object') return false;
-  return keys.some((key) => {
-    const value = item[key];
-    if (value === 0) return true;
-    return String(value || '').trim().length > 0;
-  });
-}
-
-function DetailField({ label, value }) {
-  const display = value === 0 || value === '0' ? '0' : (value || '—');
-  return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm text-slate-900 whitespace-pre-wrap">{display}</dd>
-    </div>
+function MeDiamondFormModuleFields({
+  config,
+  moduleId,
+  formData,
+  setFormData,
+  diamondForms = [],
+  diamondSections = [],
+  diamondOptions = [],
+  isView = false,
+  onCreateForm,
+  onAssignTemplate,
+  assignedEvaluatorId = '',
+  staffMembers = [],
+  onAssignEvaluator,
+}) {
+  const moduleForms = useMemo(
+    () => diamondForms.filter((form) => form.usage === config.usage),
+    [diamondForms, config.usage]
   );
-}
-
-function DetailList({ label, items }) {
-  const rows = formatListValue(items);
-  if (!rows.length) return <DetailField label={label} value="—" />;
-  return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1">
-        <ul className="list-disc list-inside space-y-1 text-sm text-slate-900">
-          {rows.map((item, index) => (
-            <li key={`${label}-${index}`}>{item}</li>
-          ))}
-        </ul>
-      </dd>
-    </div>
+  const staffOptions = useMemo(
+    () => buildStaffEvaluatorOptions(staffMembers),
+    [staffMembers]
   );
-}
-
-function DetailCard({ title, children }) {
-  return (
-    <div className="border border-slate-200 rounded-lg p-4 bg-white space-y-3">
-      {title ? <h4 className="text-sm font-bold text-slate-800">{title}</h4> : null}
-      {children}
-    </div>
+  const assignedEvaluatorLabel = useMemo(
+    () => resolveStaffEvaluatorLabel(staffMembers, assignedEvaluatorId),
+    [staffMembers, assignedEvaluatorId]
   );
-}
+  const [pendingEvaluatorId, setPendingEvaluatorId] = useState(assignedEvaluatorId);
 
-function MeRecordModuleView({ record, moduleId, orgById }) {
-  if (!record) return null;
+  useEffect(() => {
+    setPendingEvaluatorId(assignedEvaluatorId);
+  }, [assignedEvaluatorId, moduleId]);
 
-  if (moduleId === 'project') {
-    return (
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <DetailField label="Organization" value={orgById[record.organizationId]?.name} />
-        <DetailField label="Project ID" value={record.projectCode} />
-        <DetailField label="Project Name" value={record.projectName} />
-        <DetailField label="Program Area" value={record.program} />
-        <DetailField label="Project Manager" value={record.projectManager} />
-        <DetailField label="Donor / Funder" value={record.donor} />
-        <DetailField label="Project Start Date" value={record.startDate} />
-        <DetailField label="Project End Date" value={record.endDate} />
-        <DetailField label="Status" value={record.status} />
-        <DetailField label="Budget" value={currency(record.budget)} />
-      </dl>
-    );
-  }
+  const selectedFormId = formData[config.formIdKey] || '';
+  const selectedForm = useMemo(
+    () => diamondForms.find((form) => form.id === selectedFormId) || null,
+    [diamondForms, selectedFormId]
+  );
+  const selectedSections = useMemo(
+    () => diamondSections.filter((section) =>
+      (selectedForm?.sectionIds || []).includes(section.id)
+    ),
+    [diamondSections, selectedForm]
+  );
+  const usageName = usageLabel(config.usage);
 
-  if (moduleId === 'outcomes') {
-    return (
-      <dl className="space-y-4">
-        <DetailField label="Project Goal" value={record.goal} />
-        <DetailList label="Objectives" items={record.objectives} />
-        <DetailList label="Expected Outcomes" items={record.expectedOutcomes} />
-        <DetailList label="Expected Outputs" items={record.expectedOutputs} />
-        <DetailList label="Success Criteria" items={record.successCriteria} />
-        <DetailList label="Assumptions" items={record.assumptions} />
-        <DetailList label="Risks (planning)" items={record.risks} />
-      </dl>
-    );
-  }
-
-  if (moduleId === 'indicators') {
-    const rows = (record.indicators || []).filter((item) => isPopulatedRow(item));
-    if (!rows.length) return <p className="text-sm text-slate-500">No indicators were saved for this record.</p>;
-    return (
-      <div className="space-y-3">
-        {rows.map((item, index) => (
-          <DetailCard key={index} title={item.name || `Indicator ${index + 1}`}>
-            <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <DetailField label="Indicator Type" value={item.type} />
-              <DetailField label="Unit of Measure" value={item.unit} />
-              <DetailField label="Data Collection Frequency" value={item.frequency} />
-              <DetailField label="Baseline Value" value={item.baseline} />
-              <DetailField label="Target Value" value={item.target} />
-              <DetailField label="Current Value" value={item.current} />
-              <DetailField label="Description" value={item.description} />
-            </dl>
-          </DetailCard>
-        ))}
-      </div>
-    );
-  }
-
-  if (moduleId === 'activities') {
-    const rows = (record.activities || []).filter((item) => isPopulatedRow(item));
-    if (!rows.length) return <p className="text-sm text-slate-500">No activities were saved for this record.</p>;
-    return (
-      <div className="space-y-3">
-        {rows.map((item, index) => (
-          <DetailCard key={index} title={item.name || `Activity ${index + 1}`}>
-            <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <DetailField label="Activity Name" value={item.name} />
-              <DetailField label="Assigned Staff" value={item.assignedStaff} />
-              <DetailField label="Status" value={item.status} />
-              <DetailField label="Progress %" value={item.progress != null && item.progress !== '' ? pct(item.progress) : '—'} />
-              <DetailField label="Start Date" value={item.startDate} />
-              <DetailField label="End Date" value={item.endDate} />
-              <DetailField label="Budget Used" value={currency(item.budgetUsed)} />
-              <DetailField label="Description" value={item.description} />
-            </dl>
-          </DetailCard>
-        ))}
-      </div>
-    );
-  }
-
-  if (moduleId === 'beneficiaries') {
-    const rows = (record.beneficiaries || []).filter((item) => isPopulatedRow(item));
-    if (!rows.length) return <p className="text-sm text-slate-500">No beneficiaries were saved for this record.</p>;
-    return (
-      <div className="space-y-3">
-        {rows.map((item, index) => (
-          <DetailCard key={index} title={item.name || `Beneficiary ${index + 1}`}>
-            <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <DetailField label="Beneficiary Name" value={item.name} />
-              <DetailField label="Category" value={item.category} />
-              <DetailField label="Location" value={item.location} />
-              <DetailField label="Services Received" value={item.servicesReceived} />
-              <DetailField label="Gender" value={item.gender} />
-              <DetailField label="Age Group" value={item.ageGroup} />
-              <DetailField label="Number Reached" value={item.numberReached} />
-            </dl>
-          </DetailCard>
-        ))}
-      </div>
-    );
-  }
-
-  if (moduleId === 'visits') {
-    const rows = (record.fieldVisits || []).filter((item) => isPopulatedRow(item, ['visitDate', 'fieldOfficer', 'location', 'purpose', 'findings']));
-    if (!rows.length) return <p className="text-sm text-slate-500">No field visits were saved for this record.</p>;
-    return (
-      <div className="space-y-3">
-        {rows.map((item, index) => (
-          <DetailCard key={index} title={item.purpose || item.location || `Visit ${index + 1}`}>
-            <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <DetailField label="Visit Date" value={item.visitDate} />
-              <DetailField label="Field Officer" value={item.fieldOfficer} />
-              <DetailField label="Location" value={item.location} />
-              <DetailField label="Purpose" value={item.purpose} />
-              <DetailField label="Findings" value={item.findings} />
-              <DetailField label="Recommendations" value={item.recommendations} />
-              <DetailField label="Photos" value={item.photos} />
-              <DetailField label="Signatures" value={item.signatures} />
-            </dl>
-          </DetailCard>
-        ))}
-      </div>
-    );
-  }
-
-  if (moduleId === 'risks') {
-    const rows = (record.riskIssues || []).filter((item) => isPopulatedRow(item));
-    return (
-      <div className="space-y-4">
-        {rows.length ? (
-          <div className="space-y-3">
-            {rows.map((item, index) => (
-              <DetailCard key={index} title={item.description || item.riskId || `Risk ${index + 1}`}>
-                <dl className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <DetailField label="Risk ID" value={item.riskId} />
-                  <DetailField label="Severity" value={item.severity} />
-                  <DetailField label="Status" value={item.status} />
-                  <DetailField label="Mitigation Plan" value={item.mitigationPlan} />
-                  <DetailField label="Responsible Person" value={item.responsiblePerson} />
-                </dl>
-              </DetailCard>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">No risk issues were saved for this record.</p>
-        )}
-        <DetailField label="Notes" value={record.notes} />
-      </div>
-    );
-  }
-
-  return null;
-}
-
-function ArrayEditor({ id, title, items, onChange, template, children }) {
   return (
-    <div id={id} className="scroll-mt-6 md:col-span-2 border border-slate-200 rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
-        <button
-          type="button"
-          onClick={() => onChange([...items, { ...template }])}
-          className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded-lg hover:bg-slate-800"
+    <>
+      <div className="md:col-span-2 border-b border-slate-200 pb-3">
+        <h3 className="text-lg font-bold text-slate-900">{config.title}</h3>
+        <p className="text-sm text-slate-500">{config.description}</p>
+      </div>
+      <NGOFormField
+        label="Form template"
+        colSpan={2}
+        required
+        hint={
+          onAssignTemplate
+            ? `Selecting a template assigns it for ${usageName} evaluations across M&E records.`
+            : `Create templates under Diamond Forms with usage set to ${usageName}.`
+        }
+      >
+        <select
+          disabled={isView}
+          value={selectedFormId}
+          onChange={(e) => {
+            const nextFormId = e.target.value;
+            const nextForm = diamondForms.find((form) => form.id === nextFormId);
+            setFormData({
+              ...formData,
+              [config.formIdKey]: nextFormId,
+              [config.responsesKey]: nextForm
+                ? normalizeDiamondResponses(nextForm, {})
+                : {},
+            });
+            if (nextFormId && moduleId) {
+              onAssignTemplate?.(moduleId, nextFormId, pendingEvaluatorId);
+            }
+          }}
+          className={NGO_INPUT_CLASS}
         >
-          Add
-        </button>
-      </div>
-      {items.map((item, index) => (
-        <div key={index} className="border border-slate-100 rounded-lg p-3 bg-slate-50">
-          <div className="flex justify-end">
-            {items.length > 1 && (
-              <button
-                type="button"
-                onClick={() => onChange(items.filter((_, i) => i !== index))}
-                className="text-xs text-red-600 hover:text-red-800"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-          {children(item, index, (patch) => onChange(items.map((row, i) => (i === index ? { ...row, ...patch } : row))))}
+          <option value="">Select a diamond form</option>
+          {moduleForms.map((form) => (
+            <option key={form.id} value={form.id}>{form.title}</option>
+          ))}
+        </select>
+      </NGOFormField>
+      {onAssignEvaluator ? (
+        <NGOFormField
+          label="Evaluator"
+          colSpan={2}
+          hint={
+            selectedFormId
+              ? 'Choose the staff member responsible for reviewing this module.'
+              : 'Select a form template first, then assign an evaluator.'
+          }
+        >
+          <select
+            disabled={isView || !selectedFormId}
+            value={pendingEvaluatorId}
+            onChange={(e) => {
+              const nextEvaluatorId = e.target.value;
+              setPendingEvaluatorId(nextEvaluatorId);
+              onAssignEvaluator?.(moduleId, nextEvaluatorId, selectedFormId);
+            }}
+            className={NGO_INPUT_CLASS}
+          >
+            <option value="">Select evaluator</option>
+            {staffOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </NGOFormField>
+      ) : assignedEvaluatorLabel ? (
+        <NGOFormField label="Evaluator" colSpan={2}>
+          <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900">
+            {assignedEvaluatorLabel}
+          </p>
+        </NGOFormField>
+      ) : null}
+      {!selectedFormId && !isView ? (
+        <div className="md:col-span-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-4 space-y-3">
+          <p className="text-sm text-slate-600">
+            {moduleForms.length
+              ? `No form selected yet. Pick an existing ${usageName} template, or create a new one.`
+              : `No ${usageName} form templates yet. Create one in Diamond Forms to capture this module.`}
+          </p>
+          <button
+            type="button"
+            onClick={() => onCreateForm?.(config.usage)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700"
+          >
+            <Plus size={16} />
+            Create form template
+          </button>
         </div>
-      ))}
-    </div>
+      ) : null}
+      {selectedForm ? (
+        <div className="md:col-span-2">
+          <DiamondFormRenderer
+            form={selectedForm}
+            sections={selectedSections}
+            options={diamondOptions}
+            responses={normalizeDiamondResponses(selectedForm, formData[config.responsesKey])}
+            onChange={(responses) => setFormData({ ...formData, [config.responsesKey]: responses })}
+            disabled={isView}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -638,10 +563,35 @@ function MeFormStepIndicator({ steps, currentIndex }) {
   );
 }
 
+function meDrawerCopy(mode, projectName) {
+  if (mode === 'add') {
+    return {
+      badge: 'Adding',
+      badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      title: 'New Project Record',
+      subtitle: 'Create a monitoring record for a linked project',
+    };
+  }
+  if (mode === 'edit') {
+    return {
+      badge: 'Editing',
+      badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+      title: 'Edit Project Record',
+      subtitle: projectName ? `Updating ${projectName}` : 'Update saved record details',
+    };
+  }
+  return {
+    badge: 'Viewing',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    title: 'Project Record Details',
+    subtitle: projectName || 'Review saved record information',
+  };
+}
+
 function DrawerShell({
   open,
   mode,
-  title,
+  projectName,
   saving,
   onClose,
   onSaveAndContinue,
@@ -653,16 +603,23 @@ function DrawerShell({
   if (!open) return null;
 
   const isView = mode === 'view';
+  const isAdd = mode === 'add';
   const isLastStep = stepIndex >= FORM_STEPS.length - 1;
   const isFirstStep = stepIndex === 0;
+  const copy = meDrawerCopy(mode, projectName);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-sm">
       <div className="absolute right-0 top-0 h-full w-full max-w-4xl bg-white shadow-2xl flex flex-col">
         <div className="shrink-0 border-b border-slate-200 px-5 py-4 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-emerald-700">Monitoring & Evaluation</p>
-            <h2 className="text-base sm:text-xl font-bold text-slate-900">{title}</h2>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${copy.badgeClass}`}>
+                {copy.badge}
+              </span>
+            </div>
+            <h2 className="text-base sm:text-xl font-bold text-slate-900">{copy.title}</h2>
+            {copy.subtitle ? <p className="text-sm text-slate-500 mt-1">{copy.subtitle}</p> : null}
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100" title="Close">
             <X size={22} />
@@ -709,7 +666,7 @@ function DrawerShell({
                 className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-2 font-semibold"
               >
                 {saving ? <Loader2 size={18} className="animate-spin" /> : isLastStep ? <Save size={18} /> : <ChevronRight size={18} />}
-                {isLastStep ? 'Save M&E Record' : 'Save & Continue'}
+                {isLastStep ? (isAdd ? 'Create Record' : 'Save Changes') : 'Save & Continue'}
               </button>
             )}
           </div>
@@ -720,6 +677,8 @@ function DrawerShell({
 }
 
 export default function Contracts() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const popup = usePopup();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOrg, setFilterOrg] = useState('');
@@ -731,6 +690,8 @@ export default function Contracts() {
   const [activeModule, setActiveModule] = useState('outcomes');
   const [formStepIndex, setFormStepIndex] = useState(0);
   const [selectedWorkspaceRecordId, setSelectedWorkspaceRecordId] = useState('');
+  const user = getServiceUser('ngo');
+  const isAdmin = isNgoAdminUser(user);
 
   const listParams = useMemo(() => {
     const params = {};
@@ -740,22 +701,45 @@ export default function Contracts() {
   }, [filterOrg, filterStatus]);
 
   const { data: organizations = [] } = useGetNgoOrganizationsQuery();
-  const { data: projects = [] } = useGetNgoProjectsQuery(filterOrg ? { organizationId: filterOrg } : undefined);
-  const staffOrgId = formData.organizationId || filterOrg;
-  const { data: staffMembers = [] } = useGetNgoUsersQuery(
-    staffOrgId ? { organizationId: staffOrgId } : undefined,
-    { skip: !staffOrgId }
-  );
-  const activeStaff = useMemo(
-    () =>
-      staffMembers.filter((member) => {
-        const status = String(member.accountStatus || member.status || 'Active').toLowerCase();
-        return !['suspended', 'locked'].includes(status);
-      }),
-    [staffMembers]
+  const { tenantOrganizationId, tenantOrganizationName } = resolveNgoTenantOrganization(organizations);
+  const { data: projects = [] } = useGetNgoProjectsQuery(
+    (filterOrg || tenantOrganizationId) ? { organizationId: filterOrg || tenantOrganizationId } : undefined
   );
   const { data: records = [], isLoading, error, refetch } = useGetNgoContractsQuery(listParams);
   const { data: summary } = useGetNgoMonitoringSummaryQuery(listParams);
+  const assignmentOrgId = filterOrg || tenantOrganizationId;
+  const { data: assignmentRecord } = useGetNgoMeModuleAssignmentsQuery(
+    assignmentOrgId ? { organizationId: assignmentOrgId } : undefined,
+    { skip: !assignmentOrgId }
+  );
+  const [upsertAssignments] = useUpsertNgoMeModuleAssignmentsMutation();
+  const moduleAssignments = useMemo(
+    () => normalizeMeModuleAssignments(assignmentRecord?.assignments),
+    [assignmentRecord?.assignments]
+  );
+  const { data: staffMembers = [] } = useGetNgoUsersQuery(
+    assignmentOrgId ? { organizationId: assignmentOrgId } : undefined,
+    { skip: !assignmentOrgId }
+  );
+  const selectedWorkspaceRecord = records.find((record) => record.id === selectedWorkspaceRecordId) || null;
+  const diamondListParams = useMemo(() => {
+    const organizationId =
+      selectedWorkspaceRecord?.organizationId || filterOrg || tenantOrganizationId;
+    return organizationId ? { organizationId } : {};
+  }, [selectedWorkspaceRecord?.organizationId, filterOrg, tenantOrganizationId]);
+  const diamondOrgId = diamondListParams.organizationId;
+  const { data: diamondForms = [] } = useGetNgoDiamondFormsQuery(diamondListParams, {
+    skip: !diamondOrgId,
+  });
+  const { data: diamondOptions = [] } = useGetNgoDiamondOptionsQuery(diamondListParams, {
+    skip: !diamondOrgId,
+  });
+  const { data: diamondSections = [] } = useGetNgoDiamondSectionsQuery(diamondListParams, {
+    skip: !diamondOrgId,
+  });
+  const openDiamondFormCreator = (usage) => {
+    navigate(`/ngo/diamond-forms?usage=${encodeURIComponent(usage)}&action=create`);
+  };
   const [createRecord, { isLoading: creating }] = useCreateNgoContractMutation();
   const [patchRecord, { isLoading: updating }] = usePatchNgoContractMutation();
   const [deleteRecord] = useDeleteNgoContractMutation();
@@ -809,10 +793,46 @@ export default function Contracts() {
       .some((value) => String(value || '').toLowerCase().includes(term));
   });
 
-  const selectedWorkspaceRecord = records.find((record) => record.id === selectedWorkspaceRecordId) || null;
-
   const selectWorkspaceRecord = (record) => {
     if (record?.id) setSelectedWorkspaceRecordId(record.id);
+  };
+
+  const handleAssignTemplate = async (moduleId, formId, evaluatorId = '') => {
+    if (!isAdmin || !assignmentOrgId || !formId) return;
+    const current = normalizeMeModuleAssignments(assignmentRecord?.assignments);
+    try {
+      await upsertAssignments({
+        organizationId: assignmentOrgId,
+        assignments: {
+          ...current,
+          [moduleId]: {
+            formId,
+            evaluatorId: evaluatorId || current[moduleId]?.evaluatorId || '',
+          },
+        },
+      }).unwrap();
+    } catch (err) {
+      popup.toast.error(getNgoErrorMessage(err, 'Failed to assign form template'));
+    }
+  };
+
+  const handleAssignEvaluator = async (moduleId, evaluatorId, formId = '') => {
+    if (!isAdmin || !assignmentOrgId || !moduleId) return;
+    const current = normalizeMeModuleAssignments(assignmentRecord?.assignments);
+    try {
+      await upsertAssignments({
+        organizationId: assignmentOrgId,
+        assignments: {
+          ...current,
+          [moduleId]: {
+            formId: formId || current[moduleId]?.formId || '',
+            evaluatorId: evaluatorId || '',
+          },
+        },
+      }).unwrap();
+    } catch (err) {
+      popup.toast.error(getNgoErrorMessage(err, 'Failed to assign evaluator'));
+    }
   };
 
   const openAdd = () => {
@@ -822,7 +842,7 @@ export default function Contracts() {
     setSelectedRecord(null);
     setFormData({
       ...EMPTY_FORM,
-      organizationId: filterOrg || organizations[0]?.id || availableProject?.organizationId || '',
+      organizationId: tenantOrganizationId || availableProject?.organizationId || '',
       ...(availableProject ? projectToFormFields(availableProject) : {})
     });
     setShowModal(true);
@@ -840,6 +860,17 @@ export default function Contracts() {
     setFormData(normalizeRecord(record));
     setShowModal(true);
   };
+
+  useEffect(() => {
+    const { recordId, moduleId } = location.state || {};
+    if (!recordId || !records.length) return;
+    const record = records.find((entry) => entry.id === recordId);
+    if (!record) return;
+    setSelectedWorkspaceRecordId(recordId);
+    if (moduleId) setActiveModule(moduleId);
+    openRecord(record, 'edit', moduleId || 'outcomes');
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, records, location.pathname, navigate]);
 
   const handleProjectChange = (projectId) => {
     if (!projectId) {
@@ -876,10 +907,6 @@ export default function Contracts() {
 
   const validateFormStep = (stepId) => {
     if (stepId === 'project') {
-      if (!formData.organizationId) {
-        popup.alert('Organization is required.');
-        return false;
-      }
       if (!formData.projectId) {
         popup.alert('Please select a linked project.');
         return false;
@@ -892,7 +919,10 @@ export default function Contracts() {
     const stepId = FORM_STEPS[formStepIndex].id;
     if (!validateFormStep(stepId)) return false;
 
-    const stepPayload = buildStepPayload(formData, stepId);
+    const stepPayload = buildStepPayload(
+      { ...formData, organizationId: formData.organizationId || tenantOrganizationId },
+      stepId
+    );
     let recordId = selectedRecord?.id;
 
     if (modalMode === 'add' && !recordId) {
@@ -975,7 +1005,6 @@ export default function Contracts() {
   const activeFormStep = FORM_STEPS[formStepIndex];
   const activeWorkspaceModule =
     WORKSPACE_MODULES.find((module) => module.id === activeModule) || WORKSPACE_MODULES[0];
-  const ActiveModuleIcon = activeWorkspaceModule.icon;
 
   return (
     <div className="space-y-6">
@@ -1020,110 +1049,36 @@ export default function Contracts() {
         <StatCard icon={TrendingUp} label="Project performance" value={formatPercentDisplay(totals.performance)} caption={`${formatPercentDisplay(totals.projectCompletion)} average completion`} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-4">
-        <aside className="bg-white border border-slate-200 rounded-lg p-4">
-          <h2 className="text-lg font-bold text-slate-900">M&E Modules</h2>
-          <p className="mt-1 text-sm text-slate-500">Select a record, then open each section to review saved details.</p>
-          <div className="mt-4 space-y-1">
-            {WORKSPACE_MODULES.map((module) => {
-              const Icon = module.icon;
-              const active = activeModule === module.id;
-              const disabled = !selectedWorkspaceRecord;
-              return (
-                <button
-                  key={module.id}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => setActiveModule(module.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
-                    active ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon size={17} />
-                  <span className="font-medium">{module.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-
-        <div className="bg-white border border-slate-200 rounded-lg p-5">
-          <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50/80 p-4">
-            <label className="block text-sm font-semibold text-emerald-950 mb-2">M&E record</label>
-            <select
-              value={selectedWorkspaceRecordId}
-              onChange={(e) => setSelectedWorkspaceRecordId(e.target.value)}
-              className={NGO_INPUT_CLASS}
-            >
-              <option value="">Select a record to view…</option>
-              {records.map((record) => (
-                <option key={record.id} value={record.id}>
-                  {record.projectName || 'Untitled project'} ({record.projectCode || record.projectId || record.id})
-                </option>
-              ))}
-            </select>
-            {selectedWorkspaceRecord && (
-              <p className="mt-2 text-xs text-emerald-800">
-                {orgById[selectedWorkspaceRecord.organizationId]?.name || 'Organization'} · {selectedWorkspaceRecord.status || 'Planning'}
-                {selectedWorkspaceRecord.program ? ` · ${selectedWorkspaceRecord.program}` : ''}
-              </p>
-            )}
-          </div>
-
-          <div className="flex items-start justify-between gap-3 mb-5">
-            <div>
-              <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
-                <ActiveModuleIcon size={18} />
-                <span>{activeWorkspaceModule.label}</span>
-              </div>
-              <h2 className="mt-1 text-lg font-bold text-slate-900">
-                {selectedWorkspaceRecord ? activeWorkspaceModule.label : 'Select a record'}
-              </h2>
-              <p className="text-sm text-slate-500">
-                {selectedWorkspaceRecord
-                  ? `Saved data from New Project Record for ${selectedWorkspaceRecord.projectName || 'this project'}.`
-                  : 'Choose an M&E record above, or pick one from the table below, then browse modules on the left.'}
-              </p>
-            </div>
-            {selectedWorkspaceRecord && (
-              <button
-                type="button"
-                onClick={() => openRecord(selectedWorkspaceRecord, 'edit', activeWorkspaceModule.id)}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center gap-2 text-sm font-semibold shrink-0"
-              >
-                <Edit size={17} />
-                Edit {activeWorkspaceModule.label}
-              </button>
-            )}
-          </div>
-
-          {!selectedWorkspaceRecord && (
-            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 py-14 px-6 text-center">
-              <ClipboardList className="mx-auto text-slate-400 mb-3" size={40} />
-              <p className="text-slate-700 font-medium">No record selected</p>
-              <p className="mt-1 text-sm text-slate-500 max-w-md mx-auto">
-                {records.length
-                  ? 'Select a record from the dropdown, or click a row in the table below to load its M&E details.'
-                  : 'Create your first M&E record with New Project Record, then return here to review it by module.'}
-              </p>
-              {!records.length && (
-                <button type="button" onClick={openAdd} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 inline-flex items-center gap-2 text-sm font-semibold">
-                  <Plus size={17} />
-                  New Project Record
-                </button>
-              )}
-            </div>
-          )}
-
-          {selectedWorkspaceRecord && (
-            <MeRecordModuleView
-              record={selectedWorkspaceRecord}
-              moduleId={activeWorkspaceModule.id}
-              orgById={orgById}
-            />
-          )}
-        </div>
-      </div>
+      <MeEvaluationWorkspace
+        records={records}
+        orgById={orgById}
+        diamondForms={diamondForms}
+        diamondSections={diamondSections}
+        diamondOptions={diamondOptions}
+        moduleAssignments={moduleAssignments}
+        staffMembers={staffMembers}
+        selectedRecordId={selectedWorkspaceRecordId}
+        onSelectRecordId={setSelectedWorkspaceRecordId}
+        activeModuleId={activeModule}
+        onSelectModuleId={setActiveModule}
+        onEditModule={(record, moduleId) => openRecord(record, 'edit', moduleId)}
+        getEditButtonLabel={(module) => `Edit ${module.label}`}
+        sidebarTitle="M&E Modules"
+        sidebarDescription="Select a record, then open each section to review saved details."
+        emptyRecordsMessage={
+          records.length
+            ? 'Select a record from the dropdown, or click a row in the table below to load its M&E details.'
+            : 'Create your first M&E record with New Project Record, then return here to review it by module.'
+        }
+        emptyRecordsAction={
+          !records.length ? (
+            <button type="button" onClick={openAdd} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 inline-flex items-center gap-2 text-sm font-semibold">
+              <Plus size={17} />
+              New Project Record
+            </button>
+          ) : null
+        }
+      />
 
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -1244,7 +1199,7 @@ export default function Contracts() {
         open={showModal}
         onClose={() => setShowModal(false)}
         mode={modalMode}
-        title={modalMode === 'add' ? 'Create Monitoring & Evaluation Record' : modalMode === 'edit' ? 'Edit Monitoring & Evaluation Record' : 'Monitoring & Evaluation Record'}
+        projectName={formData.projectName}
         onSaveAndContinue={handleSaveAndContinue}
         saving={saving}
         stepIndex={formStepIndex}
@@ -1259,16 +1214,10 @@ export default function Contracts() {
             <p className="text-sm text-slate-500">
               {formData.projectId
                 ? 'Review project details loaded from the linked project.'
-                : 'Select an organization and linked project to continue.'}
+                : `Select a linked project for ${tenantOrganizationName} to continue.`}
             </p>
           </div>
-          <NGOFormField label="Organization" required>
-            <select disabled={isView} value={formData.organizationId} onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })} className={NGO_INPUT_CLASS}>
-              <option value="">Select organization</option>
-              {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
-            </select>
-          </NGOFormField>
-          <NGOFormField label="Linked Project" required>
+          <NGOFormField label="Linked Project" required colSpan={2}>
             <select disabled={isView} value={formData.projectId} onChange={(e) => handleProjectChange(e.target.value)} className={NGO_INPUT_CLASS}>
               <option value="">Select project</option>
               {projects.map((project) => {
@@ -1315,229 +1264,36 @@ export default function Contracts() {
             </>
           )}
 
-          {activeFormStep.id === 'outcomes' && (
-            <>
-          <div className="md:col-span-2 border-b border-slate-200 pb-3">
-            <h3 className="text-lg font-bold text-slate-900">Objectives & Outcomes</h3>
-            <p className="text-sm text-slate-500">Define the project goal, objectives, outputs, outcomes, success criteria, assumptions, and risks.</p>
-          </div>
-          <NGOFormField label="Project Goal" colSpan={2}><textarea disabled={isView} rows={2} value={formData.goal} onChange={(e) => setFormData({ ...formData, goal: e.target.value })} className={NGO_INPUT_CLASS} /></NGOFormField>
-          {[
-            ['Objectives', 'objectives'],
-            ['Expected Outcomes', 'expectedOutcomes'],
-            ['Expected Outputs', 'expectedOutputs'],
-            ['Success Criteria', 'successCriteria'],
-            ['Assumptions', 'assumptions'],
-            ['Risks', 'risks']
-          ].map(([label, key]) => (
-            <NGOFormField key={key} label={label} colSpan={2} hint="One item per line">
-              <textarea disabled={isView} rows={3} value={formData[key]} onChange={(e) => setFormData({ ...formData, [key]: e.target.value })} className={NGO_INPUT_CLASS} />
+          {ME_DIAMOND_MODULE_CONFIG[activeFormStep.id] ? (
+            <MeDiamondFormModuleFields
+              config={ME_DIAMOND_MODULE_CONFIG[activeFormStep.id]}
+              moduleId={activeFormStep.id}
+              formData={formData}
+              setFormData={setFormData}
+              diamondForms={diamondForms}
+              diamondSections={diamondSections}
+              diamondOptions={diamondOptions}
+              isView={isView}
+              onCreateForm={openDiamondFormCreator}
+              onAssignTemplate={isAdmin ? handleAssignTemplate : undefined}
+              assignedEvaluatorId={moduleAssignments[activeFormStep.id]?.evaluatorId || ''}
+              staffMembers={staffMembers}
+              onAssignEvaluator={isAdmin ? handleAssignEvaluator : undefined}
+            />
+          ) : null}
+
+          {activeFormStep.id === 'risks' ? (
+            <NGOFormField label="Notes" colSpan={2}>
+              <textarea
+                disabled={isView}
+                rows={3}
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className={NGO_INPUT_CLASS}
+                placeholder="Additional M&E notes or observations"
+              />
             </NGOFormField>
-          ))}
-            </>
-          )}
-
-          {activeFormStep.id === 'indicators' && (
-          <ArrayEditor title="Indicators Management" items={formData.indicators} onChange={(items) => setFormData({ ...formData, indicators: items })} template={blankIndicator}>
-            {(item, _index, update) => (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <NGOFormField label="Indicator Name">
-                  <input disabled={isView} value={item.name || ''} onChange={(e) => update({ name: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Indicator Type">
-                  <select disabled={isView} value={item.type || ''} onChange={(e) => update({ type: e.target.value })} className={NGO_INPUT_CLASS}>
-                    <option value="">Select type</option>
-                    {INDICATOR_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                </NGOFormField>
-                <NGOFormField label="Unit of Measure">
-                  <select disabled={isView} value={item.unit || ''} onChange={(e) => update({ unit: e.target.value })} className={NGO_INPUT_CLASS}>
-                    <option value="">Select unit</option>
-                    {UNIT_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                </NGOFormField>
-                <NGOFormField label="Data Collection Frequency">
-                  <select disabled={isView} value={item.frequency || ''} onChange={(e) => update({ frequency: e.target.value })} className={NGO_INPUT_CLASS}>
-                    <option value="">Select frequency</option>
-                    {FREQUENCY_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                </NGOFormField>
-                <NGOFormField label="Description" colSpan={2}>
-                  <textarea disabled={isView} rows={2} value={item.description || ''} onChange={(e) => update({ description: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Baseline Value">
-                  <input disabled={isView} type="number" value={item.baseline ?? ''} onChange={(e) => update({ baseline: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Target Value">
-                  <input disabled={isView} type="number" value={item.target ?? ''} onChange={(e) => update({ target: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Current Value">
-                  <input disabled={isView} type="number" value={item.current ?? ''} onChange={(e) => update({ current: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-              </div>
-            )}
-          </ArrayEditor>
-          )}
-
-          {activeFormStep.id === 'activities' && (
-          <ArrayEditor title="Activity Tracking" items={formData.activities} onChange={(items) => setFormData({ ...formData, activities: items })} template={blankActivity}>
-            {(item, _index, update) => {
-              const assignedValue = item.assignedStaff || '';
-              const staffNames = activeStaff.map((member) => staffDisplayName(member)).filter(Boolean);
-              const hasLegacyStaff = assignedValue && !staffNames.includes(assignedValue);
-              return (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <NGOFormField label="Activity Name">
-                  <input disabled={isView} value={item.name || ''} onChange={(e) => update({ name: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Assigned Staff" hint={!staffOrgId ? 'Select an organization on Project Information to load staff.' : undefined}>
-                  <select
-                    disabled={isView || !staffOrgId}
-                    value={assignedValue}
-                    onChange={(e) => update({ assignedStaff: e.target.value })}
-                    className={NGO_INPUT_CLASS}
-                  >
-                    <option value="">{staffOrgId ? 'Select staff member' : 'Select organization first'}</option>
-                    {hasLegacyStaff ? <option value={assignedValue}>{assignedValue}</option> : null}
-                    {activeStaff.map((member) => {
-                      const name = staffDisplayName(member);
-                      if (!name) return null;
-                      return (
-                        <option key={member.id} value={name}>
-                          {staffOptionLabel(member)}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </NGOFormField>
-                <NGOFormField label="Status">
-                  <select disabled={isView} value={item.status || ''} onChange={(e) => update({ status: e.target.value })} className={NGO_INPUT_CLASS}>
-                    <option value="">Select status</option>
-                    {ACTIVITY_STATUS_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                </NGOFormField>
-                <NGOFormField label="Progress %">
-                  <input disabled={isView} type="number" min={0} max={100} value={item.progress ?? ''} onChange={(e) => update({ progress: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Description" colSpan={2}>
-                  <textarea disabled={isView} rows={2} value={item.description || ''} onChange={(e) => update({ description: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Start Date">
-                  <input disabled={isView} type="date" value={item.startDate || ''} onChange={(e) => update({ startDate: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="End Date">
-                  <input disabled={isView} type="date" value={item.endDate || ''} onChange={(e) => update({ endDate: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Budget Used">
-                  <input disabled={isView} type="number" value={item.budgetUsed ?? ''} onChange={(e) => update({ budgetUsed: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-              </div>
-              );
-            }}
-          </ArrayEditor>
-          )}
-
-          {activeFormStep.id === 'beneficiaries' && (
-          <ArrayEditor title="Beneficiary Tracking" items={formData.beneficiaries} onChange={(items) => setFormData({ ...formData, beneficiaries: items })} template={blankBeneficiary}>
-            {(item, _index, update) => {
-              const genderValue = item.gender || '';
-              const hasLegacyGender = genderValue && !GENDER_OPTIONS.includes(genderValue);
-              return (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <NGOFormField label="Beneficiary Name">
-                  <input disabled={isView} value={item.name || ''} onChange={(e) => update({ name: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Category">
-                  <input disabled={isView} value={item.category || ''} onChange={(e) => update({ category: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Location">
-                  <input disabled={isView} value={item.location || ''} onChange={(e) => update({ location: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Gender">
-                  <select disabled={isView} value={genderValue} onChange={(e) => update({ gender: e.target.value })} className={NGO_INPUT_CLASS}>
-                    <option value="">Select gender</option>
-                    {hasLegacyGender ? <option value={genderValue}>{genderValue}</option> : null}
-                    {GENDER_OPTIONS.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                </NGOFormField>
-                <NGOFormField label="Age Group">
-                  <input disabled={isView} value={item.ageGroup || ''} onChange={(e) => update({ ageGroup: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Number Reached">
-                  <input disabled={isView} type="number" min={0} value={item.numberReached ?? ''} onChange={(e) => update({ numberReached: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-              
-              </div>
-              );
-            }}
-          </ArrayEditor>
-          )}
-
-          {activeFormStep.id === 'visits' && (
-          <ArrayEditor title="Field Visits" items={formData.fieldVisits} onChange={(items) => setFormData({ ...formData, fieldVisits: items })} template={blankFieldVisit}>
-            {(item, _index, update) => (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <NGOFormField label="Visit Date">
-                  <input disabled={isView} type="date" value={item.visitDate || ''} onChange={(e) => update({ visitDate: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Field Officer">
-                  <input disabled={isView} value={item.fieldOfficer || ''} onChange={(e) => update({ fieldOfficer: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Location">
-                  <input disabled={isView} value={item.location || ''} onChange={(e) => update({ location: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Purpose">
-                  <input disabled={isView} value={item.purpose || ''} onChange={(e) => update({ purpose: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Findings" colSpan={2}>
-                  <textarea disabled={isView} rows={2} value={item.findings || ''} onChange={(e) => update({ findings: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Recommendations" colSpan={2}>
-                  <textarea disabled={isView} rows={2} value={item.recommendations || ''} onChange={(e) => update({ recommendations: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Photos" colSpan={2}>
-                  <input disabled={isView} value={item.photos || ''} onChange={(e) => update({ photos: e.target.value })} className={NGO_INPUT_CLASS} placeholder="URLs or file references" />
-                </NGOFormField>
-                <NGOFormField label="Signatures" colSpan={2}>
-                  <input disabled={isView} value={item.signatures || ''} onChange={(e) => update({ signatures: e.target.value })} className={NGO_INPUT_CLASS} placeholder="Officer or beneficiary signatures" />
-                </NGOFormField>
-              </div>
-            )}
-          </ArrayEditor>
-          )}
-
-          {activeFormStep.id === 'risks' && (
-            <>
-          <ArrayEditor title="Risk & Issue Tracking" items={formData.riskIssues} onChange={(items) => setFormData({ ...formData, riskIssues: items })} template={blankRisk}>
-            {(item, _index, update) => (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                
-                <NGOFormField label="Severity">
-                  <select disabled={isView} value={item.severity || ''} onChange={(e) => update({ severity: e.target.value })} className={NGO_INPUT_CLASS}>
-                    <option value="">Select severity</option>
-                    {SEVERITY_OPTIONS.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                </NGOFormField>
-                <NGOFormField label="Status">
-                  <input disabled={isView} value={item.status || ''} onChange={(e) => update({ status: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Responsible Person">
-                  <input disabled={isView} value={item.responsiblePerson || ''} onChange={(e) => update({ responsiblePerson: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Risk Description" colSpan={2}>
-                  <textarea disabled={isView} rows={2} value={item.description || ''} onChange={(e) => update({ description: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-                <NGOFormField label="Mitigation Plan" colSpan={2}>
-                  <textarea disabled={isView} rows={2} value={item.mitigationPlan || ''} onChange={(e) => update({ mitigationPlan: e.target.value })} className={NGO_INPUT_CLASS} />
-                </NGOFormField>
-              </div>
-            )}
-          </ArrayEditor>
-          <NGOFormField label="Notes" colSpan={2}><textarea disabled={isView} rows={3} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className={NGO_INPUT_CLASS} placeholder="Additional M&E notes or observations" /></NGOFormField>
-            </>
-          )}
+          ) : null}
         </NGOFormGrid>
       </DrawerShell>
     </div>
