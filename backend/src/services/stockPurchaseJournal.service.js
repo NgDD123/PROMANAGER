@@ -174,5 +174,9 @@ export const postPurchaseJournal = async ({
     lines: journalLines,
   });
 
+  console.log(`✅ [PURCHASE JOURNAL] Purchase ${reference} recorded`);
+  console.log(`📊 [CASH FLOW] Accounts Payable increased by ${total}`);
+  console.log(`📦 [INVENTORY] Inventory increased by ${total - tax}`);
+
   return { created: true, journalEntry };
 };

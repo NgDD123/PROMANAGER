@@ -17,6 +17,8 @@ export const CashierController = {
         cashierName,
         cashierId,
         paymentMethod,
+        paymentAccountId,
+        cashOrBankAccountId,
         paidAmount,
         change,
       } = req.body;
@@ -60,6 +62,8 @@ export const CashierController = {
         cashierName: cashierName || req.user?.name || req.user?.email || '',
         cashierId: cashierId || userId || null,
         paymentMethod,
+        paymentAccountId: paymentAccountId || cashOrBankAccountId || null,
+        cashOrBankAccountId: cashOrBankAccountId || paymentAccountId || null,
         paidAmount,
         change,
         userId,

@@ -26,7 +26,19 @@ const signToken = (payload, expiresIn = "8h") =>
  */
 export const register = async (req, res) => {
   try {
-    const { name, email, password, phone, role = "GUEST", department = null, extra } = req.body;
+    const {
+      name,
+      email,
+      password,
+      phone,
+      role = "GUEST",
+      department = null,
+      organizationName,
+      company,
+      businessName,
+      companyName,
+      extra = {},
+    } = req.body;
     const existing = await getUserByEmail(email);
     if (existing) return res.status(400).json({ message: "Email already exists" });
 
@@ -34,6 +46,7 @@ export const register = async (req, res) => {
     const roleToUse = ALLOWED_ROLES.includes(normalizedRole) ? normalizedRole : "GUEST";
 
     const passwordHash = await hashPassword(password);
+    const loginCompanyName = organizationName || company || businessName || companyName || "";
     const user = await createUser({
       name,
       email,
@@ -41,7 +54,11 @@ export const register = async (req, res) => {
       phone,
       role: roleToUse,
       department,
-      extra,
+      extra: {
+        ...extra,
+        organizationName: loginCompanyName || extra.organizationName,
+        company: loginCompanyName || extra.company,
+      },
     });
 
     await logAudit({ actorId: user.id, action: "USER_REGISTER", meta: { email: user.email, role: user.role } });
@@ -149,7 +166,7 @@ export const refresh = async (req, res) => {
     const oldToken = req.body.token;
     if (!oldToken) return res.status(401).json({ message: "Missing token" });
 
-    const decoded = jwt.verify(oldToken, process.env.JWT_ACCESS_SECRET);
+    const decoded = jwt.verify(oldToken, process.env.JWT_ACCESS_SECRET, { ignoreExpiration: true });
     const user = await getUserById(decoded.id);
     if (!user) return res.status(401).json({ message: "Invalid user" });
 

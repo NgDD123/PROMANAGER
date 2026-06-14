@@ -4,6 +4,7 @@ import { PaymentController } from "../../controllers/stock/payment.controller.js
 const router = express.Router();
 
 // ===== SUPPLIER PAYMENTS =====
+router.get("/check-balance", PaymentController.checkBankBalance);
 router.post("/", PaymentController.createSupplierPayment);
 console.log("payment is hited by end point")
 router.get("/", PaymentController.getAllSupplierPayments);
