@@ -38,9 +38,18 @@ const findAccount = (accounts, explicitId, matchers) => {
   });
 };
 
-const line = (account, type, amount, fallbackName) => ({
+const buildItemDescription = (items = []) => {
+  const names = (Array.isArray(items) ? items : [])
+    .map((item) => item.productName || item.name || item.description)
+    .filter(Boolean);
+  if (!names.length) return "";
+  return names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3} more` : "");
+};
+
+const line = (account, type, amount, fallbackName, description = "") => ({
   accountId: account?.id || accountCode(account) || fallbackName,
   accountName: accountName(account, fallbackName),
+  description,
   type,
   amount: Number(amount) || 0,
   debit: type === "debit" ? Number(amount) || 0 : 0,
@@ -79,6 +88,11 @@ export const postSaleJournal = async ({
 
   if (!total) return null;
 
+  const saleReference = sale.invoiceNumber || sale.receiptNumber || saleId;
+  const saleItems = buildItemDescription(sale.items);
+  const description = sale.description ||
+    `${sourceType === "cashier" ? "POS cashier sale" : "Sales page sale"} ${saleReference}${saleItems ? ` - ${saleItems}` : ""}`;
+
   const paymentAccount = findAccount(accounts, sale.paymentAccountId, [
     "cash",
     "bank",
@@ -97,26 +111,26 @@ export const postSaleJournal = async ({
     : null;
 
   const journalLines = [
-    line(paymentAccount, "debit", total, sale.paymentMethod === "credit" ? "Accounts Receivable" : "Cash / Bank"),
-    line(revenueAccount, "credit", taxAccount ? revenue : total, "Product Sales Revenue"),
+    line(paymentAccount, "debit", total, sale.paymentMethod === "credit" ? "Accounts Receivable" : "Cash / Bank", description),
+    line(revenueAccount, "credit", taxAccount ? revenue : total, "Product Sales Revenue", description),
   ];
 
   if (taxAccount && tax > 0) {
-    journalLines.push(line(taxAccount, "credit", tax, "Tax Payable"));
+    journalLines.push(line(taxAccount, "credit", tax, "Tax Payable", `Tax on ${description}`));
   }
 
   const totalCost = costDetails.reduce((sum, item) => sum + Number(item.costOfGoodsSold || 0), 0);
   if (totalCost > 0) {
     const cogsAccount = findAccount(accounts, sale.cogsAccountId, ["cost of goods", "cost of sales", "cogs"]);
     const inventoryAccount = findAccount(accounts, sale.inventoryAccountId, ["inventory", "finished goods"]);
-    journalLines.push(line(cogsAccount, "debit", totalCost, "Cost of Goods Sold"));
-    journalLines.push(line(inventoryAccount, "credit", totalCost, "Inventory"));
+    journalLines.push(line(cogsAccount, "debit", totalCost, "Cost of Goods Sold", `COGS for ${description}`));
+    journalLines.push(line(inventoryAccount, "credit", totalCost, "Inventory", `Inventory issued for ${description}`));
   }
 
   return JournalModel.create({
     date: sale.date || new Date().toISOString(),
-    description: `${sourceType === "cashier" ? "POS cashier sale" : "Sales page sale"} - ${sale.invoiceNumber || saleId}`,
-    reference: sale.invoiceNumber || saleId,
+    description,
+    reference: saleReference,
     source: {
       type: sourceType,
       id: saleId,

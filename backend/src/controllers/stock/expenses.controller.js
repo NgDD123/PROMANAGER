@@ -55,10 +55,12 @@ export const ExpenseController = {
       }
 
       // Double-entry: Debit Expense, Credit Cash/Payable
+      const entryDescription = description || `Expense: ${expenseAcc.name}`;
       const lines = [
         {
           accountId: expenseAcc.id,
           accountName: expenseAcc.name,
+          description: entryDescription,
           type: "debit",
           amount: expenseAmount,
           debit: expenseAmount,
@@ -67,6 +69,7 @@ export const ExpenseController = {
         {
           accountId: paymentAcc.id,
           accountName: paymentAcc.name,
+          description: entryDescription,
           type: "credit",
           amount: expenseAmount,
           debit: 0,
@@ -107,7 +110,7 @@ export const ExpenseController = {
       const journal = await JournalModel.create({
         date: expenseDateValue,
         reference: `EXP-${expense.id}`,
-        description: description || `Expense: ${expenseAcc.name}`,
+        description: entryDescription,
         lines,
         totalDebit,
         totalCredit,

@@ -40,9 +40,18 @@ const findAccount = (accounts, explicitId, matchers) => {
   });
 };
 
-const line = (account, type, amount, fallbackName) => ({
+const buildItemDescription = (items = []) => {
+  const names = (Array.isArray(items) ? items : [])
+    .map((item) => item.productName || item.name || item.description)
+    .filter(Boolean);
+  if (!names.length) return "";
+  return names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3} more` : "");
+};
+
+const line = (account, type, amount, fallbackName, description = "") => ({
   accountId: account?.id || accountCode(account) || fallbackName,
   accountName: accountName(account, fallbackName),
+  description,
   type,
   amount: Number(amount) || 0,
   debit: type === "debit" ? Number(amount) || 0 : 0,
@@ -120,6 +129,11 @@ export const postPurchaseJournal = async ({
 
   if (!total) return { created: false, journalEntry: null };
 
+  const reference = purchase.invoiceNumber || purchase.number || purchaseId;
+  const itemDescription = buildItemDescription(purchase.items || [purchase]);
+  const description = purchase.description ||
+    `Purchase invoice ${reference}${itemDescription ? ` - ${itemDescription}` : ""}`;
+
   const payableAccount = findAccount(accounts, purchase.payableAccountId || purchase.paymentAccountId, [
     "accounts payable",
     "payable",
@@ -143,7 +157,7 @@ export const postPurchaseJournal = async ({
         "finished goods",
         "raw materials",
       ]);
-      return line(inventoryAccount, "debit", item.amount, "Inventory");
+      return line(inventoryAccount, "debit", item.amount, "Inventory", description);
     })
     : [
       line(findAccount(accounts, purchase.inventoryAccountId, [
@@ -151,19 +165,18 @@ export const postPurchaseJournal = async ({
         "stock",
         "finished goods",
         "raw materials",
-      ]), "debit", total - tax, "Inventory"),
+      ]), "debit", total - tax, "Inventory", description),
     ];
 
   if (tax > 0) {
-    journalLines.push(line(taxAccount, "debit", tax, "VAT Input / Tax Receivable"));
+    journalLines.push(line(taxAccount, "debit", tax, "VAT Input / Tax Receivable", `Tax on ${description}`));
   }
 
-  journalLines.push(line(payableAccount, "credit", total, "Accounts Payable"));
+  journalLines.push(line(payableAccount, "credit", total, "Accounts Payable", description));
 
-  const reference = purchase.invoiceNumber || purchase.number || purchaseId;
   const journalEntry = await JournalModel.create({
     date: purchase.date || purchase.invoiceDate || new Date().toISOString(),
-    description: `Purchase invoice - ${reference}`,
+    description,
     reference,
     referenceId: purchaseId,
     source: {

@@ -2,25 +2,70 @@ import { PaymentModel } from "../../models/stock/payment.model.js";
 import { AccountModel } from "../../models/stock/accounts.model.js";
 import JournalModel from "../../models/stock/journal.model.js";
 
+const normalizeText = (value = "") => String(value).toLowerCase();
+
+const isIncomingBankSource = (entry) => {
+  const sourceType = normalizeText(entry?.source?.type || entry?.type || "");
+  return ["sale", "cashier", "customerpayment", "customer payment", "bankdeposit", "bank deposit"].some((type) =>
+    sourceType.includes(type)
+  );
+};
+
 const getAccountBalance = async (accountId) => {
-  const journal = await JournalModel.findAll();
-  let balance = 0;
+  const [journal, accounts] = await Promise.all([
+    JournalModel.findAll(),
+    AccountModel.findAll(),
+  ]);
+  const account = accounts.find(
+    (item) =>
+      String(item.id) === String(accountId) ||
+      String(item.code || "") === String(accountId)
+  );
+  if (!account) {
+    return {
+      account: null,
+      balance: 0,
+    };
+  }
+
+  let balance = account.sourceType === "CompanySettings" || account.sourceAccountRole === "Bank"
+    ? Number(account.openingBalance) || Number(account.openingInvestment) || 0
+    : 0;
   
   journal.forEach((entry) => {
     if (entry.lines) {
       entry.lines.forEach((line) => {
-        if (line.accountId === accountId || line.accountId === accountId?.id || line.accountId === accountId?.code) {
-          balance += (line.debit || 0) - (line.credit || 0);
+        const lineAccountId = String(line.accountId || "");
+        const matchesAccount =
+          lineAccountId === String(accountId) ||
+          lineAccountId === String(account?.id || "") ||
+          lineAccountId === String(account?.code || "");
+
+        if (matchesAccount) {
+          const debit = Number(line.debit || 0);
+          const credit = Number(line.credit || 0);
+
+          if (credit > 0) {
+            balance -= credit;
+          }
+
+          if (debit > 0 && isIncomingBankSource(entry)) {
+            balance += debit;
+          }
         }
       });
     }
   });
-  return Math.max(balance, 0);
+  return {
+    account,
+    balance: Math.max(balance, 0),
+  };
 };
 
-const journalLine = (account, type, amount, fallbackName) => ({
+const journalLine = (account, type, amount, fallbackName, description = "") => ({
   accountId: account?.id || account?.code || fallbackName,
   accountName: account?.name || fallbackName,
+  description,
   type,
   amount: Number(amount) || 0,
   debit: type === "debit" ? Number(amount) || 0 : 0,
@@ -72,8 +117,8 @@ const postSupplierPaymentJournal = async (payment) => {
       id: payment.id,
     },
     lines: [
-      journalLine(payableAccount, "debit", amount, "Accounts Payable"),
-      journalLine(bankAccount, "credit", amount, "Cash / Bank"),
+      journalLine(payableAccount, "debit", amount, "Accounts Payable", payment.description || `Supplier payment - ${payment.reference || payment.id}`),
+      journalLine(bankAccount, "credit", amount, "Cash / Bank", payment.description || `Supplier payment - ${payment.reference || payment.id}`),
     ],
   });
 };
@@ -87,12 +132,13 @@ export const PaymentController = {
         return res.status(400).json({ error: "Account ID and amount required" });
       }
       
-      const balance = await getAccountBalance(accountId);
+      const { account, balance } = await getAccountBalance(accountId);
       const paymentAmount = Number(amount);
       const hasBalance = balance >= paymentAmount;
       
       res.json({
         accountId,
+        accountName: account?.name || account?.accountName || accountId,
         availableBalance: balance,
         requestedAmount: paymentAmount,
         canPay: hasBalance,
@@ -123,7 +169,15 @@ export const PaymentController = {
         });
       }
       
-      const balance = await getAccountBalance(bankAccountId);
+      const { account, balance } = await getAccountBalance(bankAccountId);
+
+      if (!account) {
+        return res.status(400).json({
+          error: "Selected bank account was not found",
+          availableBalance: 0,
+          requestedAmount: Number(amount),
+        });
+      }
       
       if (balance < Number(amount)) {
         return res.status(400).json({
